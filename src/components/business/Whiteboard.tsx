@@ -12,6 +12,8 @@ interface WhiteboardProps {
   onModeChange: (mode: BudgetMode) => void
 }
 
+const PERSISTENCE_KEY = 'shape-of-money-whiteboard'
+
 export function Whiteboard({ budgetMode, onModeChange }: WhiteboardProps) {
   const editorRef = useRef<Editor | null>(null)
   const previousModeRef = useRef<BudgetMode>('select')
@@ -86,6 +88,7 @@ export function Whiteboard({ budgetMode, onModeChange }: WhiteboardProps) {
     <div className="w-full h-full relative">
       <div className="w-full h-full pt-20">
         <Tldraw
+          persistenceKey={PERSISTENCE_KEY}
           onMount={handleMount}
           shapeUtils={[BudgetBlockUtil]}
           components={{
