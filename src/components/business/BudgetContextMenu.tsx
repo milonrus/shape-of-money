@@ -43,6 +43,7 @@ function BudgetContextMenuContent() {
 
         return {
           id: shape.id,
+          type: 'budget-block' as const,
           props: { w, h },
         }
       })

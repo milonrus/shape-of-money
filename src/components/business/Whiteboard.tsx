@@ -54,6 +54,7 @@ export function Whiteboard({ budgetMode, onModeChange }: WhiteboardProps) {
           name: type === 'income' ? 'Income' : 'Expense',
           type: type,
           color: color,
+          opacity: 1,
         }
       } as BudgetBlockShape)
 

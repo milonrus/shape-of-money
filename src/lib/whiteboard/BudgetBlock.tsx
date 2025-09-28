@@ -9,6 +9,7 @@ import {
   type TLBaseShape,
 } from '@tldraw/tldraw'
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
+import { createShapePropsMigrationIds, createShapePropsMigrationSequence } from '@tldraw/tlschema'
 
 export const AMOUNT_TO_AREA_SCALE = 60
 export const MIN_BUDGET_BLOCK_SIZE = 64
@@ -72,12 +73,38 @@ interface BudgetBlockComponentProps {
 // eslint-disable-next-line react-refresh/only-export-components
 function BudgetBlockComponent({ shape }: BudgetBlockComponentProps) {
   const editor = useEditor()
-  const { w, h, amount, currency, name, type, color } = shape.props
+  const { w, h, amount, currency, name, type, color, opacity: rawOpacity } = shape.props
+  const opacity = Number.isFinite(rawOpacity) ? clamp(rawOpacity, 0, 1) : 1
 
   const theme = getDefaultColorTheme({ isDarkMode: false })
   const themeColor = theme[color as keyof typeof theme]
   const colorValue =
     typeof themeColor === 'object' && themeColor.solid ? themeColor.solid : type === 'income' ? '#22c55e' : '#ef4444'
+
+  const hexToRgba = (hex: string, alpha: number) => {
+    const cleaned = hex.replace('#', '')
+    if (cleaned.length === 3) {
+      const r = cleaned[0]
+      const g = cleaned[1]
+      const b = cleaned[2]
+      return hexToRgba(`${r}${r}${g}${g}${b}${b}`, alpha)
+    }
+
+    if (cleaned.length !== 6) {
+      return hex
+    }
+
+    const r = Number.parseInt(cleaned.slice(0, 2), 16)
+    const g = Number.parseInt(cleaned.slice(2, 4), 16)
+    const b = Number.parseInt(cleaned.slice(4, 6), 16)
+    if ([r, g, b].some(Number.isNaN)) {
+      return hex
+    }
+
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
+
+  const backgroundColor = hexToRgba(colorValue, opacity)
 
   const [editingField, setEditingField] = useState<'name' | 'amount' | null>(null)
   const [nameDraft, setNameDraft] = useState(name)
@@ -149,6 +176,7 @@ function BudgetBlockComponent({ shape }: BudgetBlockComponentProps) {
       editor.updateShapes([
         {
           id: shape.id,
+          type: 'budget-block' as const,
           props: { name: nextValue },
         },
       ])
@@ -178,6 +206,7 @@ function BudgetBlockComponent({ shape }: BudgetBlockComponentProps) {
       editor.updateShapes([
         {
           id: shape.id,
+          type: 'budget-block' as const,
           props: {
             amount: parsed,
             w: nextW,
@@ -216,7 +245,7 @@ function BudgetBlockComponent({ shape }: BudgetBlockComponentProps) {
       style={{
         width: w,
         height: h,
-        backgroundColor: colorValue,
+        backgroundColor,
         border: '2px solid #000',
         borderRadius: '4px',
         display: 'flex',
@@ -336,6 +365,7 @@ const budgetBlockProps = {
   name: T.string,
   type: T.literalEnum('income', 'expense'),
   color: T.string,
+  opacity: T.number,
 }
 
 // Type definition for the budget block shape
@@ -349,6 +379,7 @@ export type BudgetBlockShape = TLBaseShape<
     name: string
     type: 'income' | 'expense'
     color: string
+    opacity: number
   }
 >
 
@@ -370,6 +401,7 @@ export class BudgetBlockUtil extends ShapeUtil<BudgetBlockShape> {
       name: 'Budget Item',
       type: 'income',
       color: 'green',
+      opacity: 1,
     }
   }
 
@@ -457,11 +489,25 @@ export class BudgetBlockUtil extends ShapeUtil<BudgetBlockShape> {
 }
 
 // Migrations for shape data - using default migrations
-export const budgetBlockMigrations = {
-  currentVersion: 1,
-  firstVersion: 1,
-  migrators: {},
-}
+const Versions = createShapePropsMigrationIds('budget-block', {
+  AddOpacity: 1,
+})
+
+export const budgetBlockMigrations = createShapePropsMigrationSequence({
+  sequence: [
+    {
+      id: Versions.AddOpacity,
+      up: (props) => {
+        if (props.opacity === undefined) {
+          props.opacity = 1
+        }
+      },
+      down: (props) => {
+        delete (props as Partial<BudgetBlockShape['props']>).opacity
+      },
+    },
+  ],
+})
 
 // Update the static migrations property
 BudgetBlockUtil.migrations = budgetBlockMigrations
