@@ -7,11 +7,13 @@ function App() {
   const [budgetMode, setBudgetMode] = useState<BudgetMode>('select')
 
   const handleAddIncome = () => {
-    setBudgetMode('income')
+    console.log('Add Income clicked')
+    setBudgetMode('income') // This will trigger the useEffect in Whiteboard
   }
 
   const handleAddExpense = () => {
-    setBudgetMode('expense')
+    console.log('Add Expense clicked')
+    setBudgetMode('expense') // This will trigger the useEffect in Whiteboard
   }
 
   const handleModeChange = (mode: BudgetMode) => {
@@ -24,7 +26,7 @@ function App() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Shape of Money</h1>
-            <p className="text-sm text-gray-600">Visual budgeting whiteboard</p>
+            <p className="text-sm text-gray-800">Visual budgeting whiteboard</p>
           </div>
 
           <div className="flex gap-3">
@@ -61,6 +63,12 @@ function App() {
               Select
             </button>
           </div>
+        </div>
+
+        {/* Status indicator */}
+        <div className="mt-2 text-sm text-gray-600">
+          Mode: <span className="font-semibold">{budgetMode}</span>
+          <span className="ml-2">Click buttons to add €100 shapes</span>
         </div>
       </header>
 
