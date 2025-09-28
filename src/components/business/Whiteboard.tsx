@@ -3,6 +3,7 @@ import { Tldraw, Editor, createShapeId } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
 import { BudgetBlockUtil, computeDimensionsForAmount, MIN_BUDGET_BLOCK_SIZE, type BudgetBlockShape } from '../../lib/whiteboard/BudgetBlock'
 import { BudgetStylePanel } from './BudgetStylePanel'
+import { BudgetContextMenu } from './BudgetContextMenu'
 
 type BudgetMode = 'select' | 'income' | 'expense'
 
@@ -89,6 +90,7 @@ export function Whiteboard({ budgetMode, onModeChange }: WhiteboardProps) {
           shapeUtils={[BudgetBlockUtil]}
           components={{
             StylePanel: BudgetStylePanel,
+            ContextMenu: BudgetContextMenu,
           }}
         />
       </div>
