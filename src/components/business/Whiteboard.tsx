@@ -1,22 +1,24 @@
-import { useCallback, useRef, useEffect } from 'react'
-import { Tldraw, Editor, type TLUiOverrides } from '@tldraw/tldraw'
-import '@tldraw/tldraw/tldraw.css'
-import { BudgetBlockUtil } from '../../lib/whiteboard/BudgetBlock'
-import { BudgetBlockTool } from '../../lib/whiteboard/BudgetBlockTool'
-import { BudgetStylePanel } from './BudgetStylePanel'
-import { BudgetContextMenu } from './BudgetContextMenu'
+import { useCallback, useRef, useEffect } from 'react';
+import { Tldraw, Editor, type TLUiOverrides } from '@tldraw/tldraw';
+import '@tldraw/tldraw/tldraw.css';
+import { BudgetBlockUtil } from '../../lib/whiteboard/BudgetBlock';
+import { BudgetBlockTool } from '../../lib/whiteboard/BudgetBlockTool';
+import { BudgetStylePanel } from './BudgetStylePanel';
+import { BudgetContextMenu } from './BudgetContextMenu';
 
-type BudgetMode = 'select' | 'budget-block'
+export type BudgetMode = 'select' | 'budget-block';
 
 interface WhiteboardProps {
-  budgetMode: BudgetMode
-  onModeChange: (mode: BudgetMode) => void
+  budgetMode: BudgetMode;
+  onModeChange: (mode: BudgetMode) => void;
+  onEditorReady?: (editor: Editor) => void;
+  persistenceKey?: string;
 }
 
-const PERSISTENCE_KEY = 'shape-of-money-whiteboard'
+const DEFAULT_PERSISTENCE_KEY = 'shape-of-money-whiteboard';
 
 // Tools array for tldraw
-const customTools = [BudgetBlockTool]
+const customTools = [BudgetBlockTool];
 
 // UI overrides to add BudgetBlock tool to toolbar
 const uiOverrides: TLUiOverrides = {
@@ -27,37 +29,42 @@ const uiOverrides: TLUiOverrides = {
       label: 'Budget Block',
       kbd: 'b',
       onSelect: () => {
-        editor.setCurrentTool('budget-block')
+        editor.setCurrentTool('budget-block');
       },
-    }
-    return tools
+    };
+    return tools;
   },
-}
+};
 
-export function Whiteboard({ budgetMode }: WhiteboardProps) {
-  const editorRef = useRef<Editor | null>(null)
+export function Whiteboard({ budgetMode, onEditorReady, persistenceKey }: WhiteboardProps) {
+  const editorRef = useRef<Editor | null>(null);
+  const persistenceId = persistenceKey ?? DEFAULT_PERSISTENCE_KEY;
 
   // Handle external mode changes from header buttons
   useEffect(() => {
-    const editor = editorRef.current
-    if (!editor) return
+    const editor = editorRef.current;
+    if (!editor) return;
 
     if (budgetMode === 'budget-block') {
-      editor.setCurrentTool('budget-block')
+      editor.setCurrentTool('budget-block');
     } else if (budgetMode === 'select') {
-      editor.setCurrentTool('select')
+      editor.setCurrentTool('select');
     }
-  }, [budgetMode])
+  }, [budgetMode]);
 
-  const handleMount = useCallback((editor: Editor) => {
-    editorRef.current = editor
-  }, [])
+  const handleMount = useCallback(
+    (editor: Editor) => {
+      editorRef.current = editor;
+      onEditorReady?.(editor);
+    },
+    [onEditorReady]
+  );
 
   return (
     <div className="w-full h-full relative">
       <div className="w-full h-full pt-20">
         <Tldraw
-          persistenceKey={PERSISTENCE_KEY}
+          persistenceKey={persistenceId}
           onMount={handleMount}
           shapeUtils={[BudgetBlockUtil]}
           tools={customTools}
@@ -69,5 +76,5 @@ export function Whiteboard({ budgetMode }: WhiteboardProps) {
         />
       </div>
     </div>
-  )
+  );
 }
