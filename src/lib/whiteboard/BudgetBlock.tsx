@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 
 import { createShapePropsMigrationIds, createShapePropsMigrationSequence } from '@tldraw/tlschema'
 
 export const AMOUNT_TO_AREA_SCALE = 60
-export const MIN_BUDGET_BLOCK_SIZE = 64
+export const MIN_BUDGET_BLOCK_SIZE = 54.8
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 

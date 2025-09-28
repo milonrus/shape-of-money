@@ -32,6 +32,16 @@ export class Pointing extends StateNode {
     const { isDragging, originPagePoint, currentPagePoint } = this.editor.inputs
 
     if (isDragging) {
+      // Calculate free-form rectangle based on drag distance
+      const minX = Math.min(originPagePoint.x, currentPagePoint.x)
+      const minY = Math.min(originPagePoint.y, currentPagePoint.y)
+      const maxX = Math.max(originPagePoint.x, currentPagePoint.x)
+      const maxY = Math.max(originPagePoint.y, currentPagePoint.y)
+      const w = Math.max(8, maxX - minX)
+      const h = Math.max(8, maxY - minY)
+      const area = w * h
+      const amount = Math.max(50, Math.round(area / 60)) // Using AMOUNT_TO_AREA_SCALE = 60, minimum 50
+
       if (!this.shapeId) {
         // First drag movement - create the shape
         this.shapeId = createShapeId()
@@ -39,12 +49,12 @@ export class Pointing extends StateNode {
         this.editor.createShape({
           id: this.shapeId,
           type: 'budget-block',
-          x: originPagePoint.x,
-          y: originPagePoint.y,
+          x: minX,
+          y: minY,
           props: {
-            w: Math.max(8, Math.abs(currentPagePoint.x - originPagePoint.x)),
-            h: Math.max(8, Math.abs(currentPagePoint.y - originPagePoint.y)),
-            amount: 1,
+            w,
+            h,
+            amount,
             currency: '€',
             name: 'Budget Item',
             type: 'income',
@@ -53,15 +63,12 @@ export class Pointing extends StateNode {
           }
         } as BudgetBlockShape)
       } else {
-        // Update the shape size as user drags
-        const w = Math.max(8, Math.abs(currentPagePoint.x - originPagePoint.x))
-        const h = Math.max(8, Math.abs(currentPagePoint.y - originPagePoint.y))
-        const area = w * h
-        const amount = Math.max(1, Math.round(area / 60)) // Using AMOUNT_TO_AREA_SCALE = 60
-
+        // Update the shape position and size as user drags
         this.editor.updateShape({
           id: this.shapeId,
           type: 'budget-block',
+          x: minX,
+          y: minY,
           props: { w, h, amount }
         })
       }
@@ -70,18 +77,19 @@ export class Pointing extends StateNode {
 
   override onPointerUp() {
     if (!this.shapeId) {
-      // Quick click without drag - create default size shape
+      // Quick click without drag - create default size square shape
       const { currentPagePoint } = this.editor.inputs
       const id = createShapeId()
+      const size = 80 // Square size
 
       this.editor.createShape({
         id,
         type: 'budget-block',
-        x: currentPagePoint.x - 50,
-        y: currentPagePoint.y - 32,
+        x: currentPagePoint.x - size / 2,
+        y: currentPagePoint.y - size / 2,
         props: {
-          w: 100,
-          h: 64,
+          w: size,
+          h: size,
           amount: 100,
           currency: '€',
           name: 'Budget Item',
@@ -92,8 +100,39 @@ export class Pointing extends StateNode {
       } as BudgetBlockShape)
 
       this.editor.setSelectedShapes([id])
+      this.editor.setCurrentTool('select')
     } else {
-      // Drag completed - select the created shape and switch to select tool
+      // Drag completed - enforce minimum size if needed, then select and switch to select tool
+      const shape = this.editor.getShape(this.shapeId!)
+      if (shape && shape.type === 'budget-block') {
+        const minSize = 54.8
+        const currentW = shape.props.w
+        const currentH = shape.props.h
+
+        if (currentW < minSize || currentH < minSize) {
+          // Shape is too small, update to minimum size while maintaining aspect ratio
+          const aspectRatio = currentW / currentH
+          let newW = Math.max(minSize, currentW)
+          let newH = Math.max(minSize, currentH)
+
+          // If we had to increase one dimension, adjust the other to maintain area
+          if (newW === minSize && currentW < minSize) {
+            newH = Math.max(minSize, newW / aspectRatio)
+          } else if (newH === minSize && currentH < minSize) {
+            newW = Math.max(minSize, newH * aspectRatio)
+          }
+
+          const area = newW * newH
+          const amount = Math.max(50, Math.round(area / 60))
+
+          this.editor.updateShape({
+            id: this.shapeId!,
+            type: 'budget-block',
+            props: { w: newW, h: newH, amount }
+          })
+        }
+      }
+
       this.editor.setSelectedShapes([this.shapeId])
       this.editor.setCurrentTool('select')
     }
