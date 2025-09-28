@@ -20,6 +20,7 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-switch": "^1.2.6",
     "@tldraw/tldraw": "^4.1.0-canary.e4499a57ef5b",
+    "d3-hierarchy": "^3.1.2",
     "lucide-react": "^0.544.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
