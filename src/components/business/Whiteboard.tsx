@@ -1,11 +1,12 @@
 import { useCallback, useRef, useEffect } from 'react'
-import { Tldraw, Editor, createShapeId } from '@tldraw/tldraw'
+import { Tldraw, Editor, type TLUiOverrides } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
-import { BudgetBlockUtil, computeDimensionsForAmount, MIN_BUDGET_BLOCK_SIZE, type BudgetBlockShape } from '../../lib/whiteboard/BudgetBlock'
+import { BudgetBlockUtil } from '../../lib/whiteboard/BudgetBlock'
+import { BudgetBlockTool } from '../../lib/whiteboard/BudgetBlockTool'
 import { BudgetStylePanel } from './BudgetStylePanel'
 import { BudgetContextMenu } from './BudgetContextMenu'
 
-type BudgetMode = 'select' | 'income' | 'expense'
+type BudgetMode = 'select' | 'budget-block'
 
 interface WhiteboardProps {
   budgetMode: BudgetMode
@@ -14,72 +15,39 @@ interface WhiteboardProps {
 
 const PERSISTENCE_KEY = 'shape-of-money-whiteboard'
 
-export function Whiteboard({ budgetMode, onModeChange }: WhiteboardProps) {
+// Tools array for tldraw
+const customTools = [BudgetBlockTool]
+
+// UI overrides to add BudgetBlock tool to toolbar
+const uiOverrides: TLUiOverrides = {
+  tools(editor, tools) {
+    tools['budget-block'] = {
+      id: 'budget-block',
+      icon: 'geo-rectangle',
+      label: 'Budget Block',
+      kbd: 'b',
+      onSelect: () => {
+        editor.setCurrentTool('budget-block')
+      },
+    }
+    return tools
+  },
+}
+
+export function Whiteboard({ budgetMode }: WhiteboardProps) {
   const editorRef = useRef<Editor | null>(null)
-  const previousModeRef = useRef<BudgetMode>('select')
 
-  const createShape = useCallback((type: 'income' | 'expense') => {
-    const editor = editorRef.current
-    if (!editor) {
-      console.error('No editor available')
-      return
-    }
-
-    const shapeId = createShapeId()
-
-    // Get viewport center for placement
-    const viewportCenter = editor.getViewportScreenCenter()
-    const worldCenter = editor.screenToPage(viewportCenter)
-
-    // Add some randomness so shapes don't stack exactly
-    const offsetX = (Math.random() - 0.5) * 100
-    const offsetY = (Math.random() - 0.5) * 100
-
-    const color = type === 'income' ? 'green' : 'red'
-
-    try {
-      const defaultAspectSeed = MIN_BUDGET_BLOCK_SIZE
-      const { w, h } = computeDimensionsForAmount(100, defaultAspectSeed, defaultAspectSeed)
-
-      editor.createShape({
-        id: shapeId,
-        type: 'budget-block',
-        x: worldCenter.x + offsetX - w / 2,
-        y: worldCenter.y + offsetY - h / 2,
-        props: {
-          w,
-          h,
-          amount: 100,
-          currency: '€',
-          name: type === 'income' ? 'Income' : 'Expense',
-          type: type,
-          color: color,
-          opacity: 1,
-        }
-      } as BudgetBlockShape)
-
-      // Select the newly created shape so the custom properties panel appears
-      editor.setSelectedShapes([shapeId])
-
-      // Automatically switch back to select mode
-      setTimeout(() => onModeChange('select'), 100)
-    } catch (error) {
-      console.error(`Error creating ${type} shape:`, error)
-    }
-  }, [onModeChange])
-
-  // Watch for mode changes and create shapes automatically
+  // Handle external mode changes from header buttons
   useEffect(() => {
-    const previousMode = previousModeRef.current
+    const editor = editorRef.current
+    if (!editor) return
 
-    if (previousMode === 'select' && budgetMode === 'income') {
-      createShape('income')
-    } else if (previousMode === 'select' && budgetMode === 'expense') {
-      createShape('expense')
+    if (budgetMode === 'budget-block') {
+      editor.setCurrentTool('budget-block')
+    } else if (budgetMode === 'select') {
+      editor.setCurrentTool('select')
     }
-
-    previousModeRef.current = budgetMode
-  }, [budgetMode, createShape])
+  }, [budgetMode])
 
   const handleMount = useCallback((editor: Editor) => {
     editorRef.current = editor
@@ -92,6 +60,8 @@ export function Whiteboard({ budgetMode, onModeChange }: WhiteboardProps) {
           persistenceKey={PERSISTENCE_KEY}
           onMount={handleMount}
           shapeUtils={[BudgetBlockUtil]}
+          tools={customTools}
+          overrides={uiOverrides}
           components={{
             StylePanel: BudgetStylePanel,
             ContextMenu: BudgetContextMenu,

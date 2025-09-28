@@ -1,19 +1,14 @@
 import { useState } from 'react'
 import { Whiteboard } from './components/business/Whiteboard'
 
-type BudgetMode = 'select' | 'income' | 'expense'
+type BudgetMode = 'select' | 'budget-block'
 
 function App() {
   const [budgetMode, setBudgetMode] = useState<BudgetMode>('select')
 
-  const handleAddIncome = () => {
-    console.log('Add Income clicked')
-    setBudgetMode('income') // This will trigger the useEffect in Whiteboard
-  }
-
-  const handleAddExpense = () => {
-    console.log('Add Expense clicked')
-    setBudgetMode('expense') // This will trigger the useEffect in Whiteboard
+  const handleBudgetBlockMode = () => {
+    console.log('BudgetBlock tool selected')
+    setBudgetMode('budget-block')
   }
 
   const handleModeChange = (mode: BudgetMode) => {
@@ -31,25 +26,14 @@ function App() {
 
           <div className="flex gap-3">
             <button
-              onClick={handleAddIncome}
+              onClick={handleBudgetBlockMode}
               className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                budgetMode === 'income'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-green-100 text-green-700 hover:bg-green-200'
+                budgetMode === 'budget-block'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
               }`}
             >
-              + Add Income
-            </button>
-
-            <button
-              onClick={handleAddExpense}
-              className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                budgetMode === 'expense'
-                  ? 'bg-red-600 text-white'
-                  : 'bg-red-100 text-red-700 hover:bg-red-200'
-              }`}
-            >
-              + Add Expense
+              Budget Block (B)
             </button>
 
             <button
@@ -68,7 +52,11 @@ function App() {
         {/* Status indicator */}
         <div className="mt-2 text-sm text-gray-600">
           Mode: <span className="font-semibold">{budgetMode}</span>
-          <span className="ml-2">Click buttons to add €100 shapes</span>
+          <span className="ml-2">
+            {budgetMode === 'budget-block'
+              ? 'Click and drag on canvas to draw budget blocks'
+              : 'Select Budget Block tool or use keyboard shortcut (B)'}
+          </span>
         </div>
       </header>
 
