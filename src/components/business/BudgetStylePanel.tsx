@@ -33,7 +33,7 @@ export function BudgetStylePanel() {
   )
 
   const colorTheme = useMemo(() => getDefaultColorTheme({ isDarkMode: false }), [])
-  const colorOptions = useMemo(() => [...defaultColorNames], [])
+  const colorOptions = useMemo(() => defaultColorNames.filter(color => color !== 'white'), [])
 
   const resolveColorValue = useCallback(
     (colorName: string) => {
@@ -46,18 +46,6 @@ export function BudgetStylePanel() {
     [colorTheme]
   )
 
-  // DEBUG: Log color data to understand what we're working with
-  useEffect(() => {
-    console.log('🎨 COLOR DEBUG:')
-    console.log('defaultColorNames:', defaultColorNames)
-    console.log('colorOptions:', colorOptions)
-    console.log('colorTheme:', colorTheme)
-
-    colorOptions.forEach((colorName, index) => {
-      const resolvedValue = resolveColorValue(colorName)
-      console.log(`Color ${index}: ${colorName} -> ${resolvedValue}`)
-    })
-  }, [colorOptions, colorTheme, resolveColorValue])
 
   const budgetBlockSignature = budgetBlocks
     .map(block => `${block.id}:${block.props.name}:${block.props.amount}`)
@@ -361,18 +349,11 @@ export function BudgetStylePanel() {
         </div>
 
         <div className="flex flex-col gap-3 rounded-lg border border-[var(--tl-color-divider)] bg-[var(--tl-color-muted-1)]/40 p-3">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', padding: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', padding: '6px' }}>
             {colorOptions.map((colorName) => {
               const colorValue = resolveColorValue(colorName)
               const isActive = allSameColor && firstBlockColor === colorName
 
-              // DEBUG: Log each color button render
-              console.log(`🎨 Rendering button for ${colorName}:`, {
-                colorValue,
-                isActive,
-                allSameColor,
-                firstBlockColor
-              })
 
               return (
                 <button
@@ -380,15 +361,17 @@ export function BudgetStylePanel() {
                   type="button"
                   onClick={() => handleColorToggle(colorName)}
                   style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '4px',
-                    border: isActive ? '2px solid #007bff' : '1px solid #ccc',
-                    backgroundColor: '#fff',
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '8px',
+                    border: isActive ? '2px solid var(--tl-color-selected, #007bff)' : '1px solid var(--tl-color-divider, #e0e0e0)',
+                    backgroundColor: 'var(--tl-color-panel-contrast, #fff)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    outline: 'none'
                   }}
                   aria-label={`Set color ${colorName}`}
                   aria-pressed={isActive}
@@ -396,11 +379,11 @@ export function BudgetStylePanel() {
                 >
                   <div
                     style={{
-                      width: '20px',
-                      height: '20px',
+                      width: '24px',
+                      height: '24px',
                       borderRadius: '50%',
                       backgroundColor: colorValue,
-                      border: colorName === 'white' ? '1px solid #ccc' : 'none'
+                      boxShadow: isActive ? '0 0 0 2px var(--tl-color-panel-contrast, #fff)' : 'none'
                     }}
                   />
                 </button>
