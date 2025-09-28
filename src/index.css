@@ -1,6 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --app-font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --app-background: #f8fafc;
+    --app-surface: #ffffff;
+    --app-surface-muted: #f1f5f9;
+    --app-panel: rgba(255, 255, 255, 0.9);
+    --app-border: rgba(15, 23, 42, 0.12);
+    --app-border-strong: rgba(15, 23, 42, 0.28);
+    --app-text-primary: #0f172a;
+    --app-text-secondary: #334155;
+    --app-text-muted: #64748b;
+    --app-accent: #2563eb;
+    --budget-block-border: rgba(15, 23, 42, 0.32);
+    --budget-block-input-bg: rgba(255, 255, 255, 0.96);
+    --budget-block-input-border: rgba(15, 23, 42, 0.2);
+    --budget-block-input-text: #0f172a;
+    --budget-block-text-shadow: 1px 1px 2px rgba(15, 23, 42, 0.4);
+    color-scheme: light;
+  }
+
+  .dark {
+    --app-background: #020617;
+    --app-surface: #0f172a;
+    --app-surface-muted: #111827;
+    --app-panel: rgba(15, 23, 42, 0.85);
+    --app-border: rgba(148, 163, 184, 0.28);
+    --app-border-strong: rgba(148, 163, 184, 0.45);
+    --app-text-primary: #e2e8f0;
+    --app-text-secondary: #cbd5f5;
+    --app-text-muted: #94a3b8;
+    --app-accent: #60a5fa;
+    --budget-block-border: rgba(148, 163, 184, 0.52);
+    --budget-block-input-bg: rgba(15, 23, 42, 0.92);
+    --budget-block-input-border: rgba(148, 163, 184, 0.4);
+    --budget-block-input-text: #e2e8f0;
+    --budget-block-text-shadow: 1px 1px 2px rgba(8, 47, 73, 0.9);
+    color-scheme: dark;
+  }
+
+  body {
+    font-family: var(--app-font-sans);
+    background-color: var(--app-background);
+    color: var(--app-text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+    min-height: 100vh;
+  }
+}
+
+.dark body {
+  background-color: var(--app-background);
+  color: var(--app-text-primary);
+}
+
+:root .tl-container {
+  background-color: var(--app-surface);
+}
+
+.dark .tl-container {
+  background-color: var(--app-surface);
+}
 
 /* Override tldraw UI positioning to avoid overlap with header */
 .tlui-layout__top {

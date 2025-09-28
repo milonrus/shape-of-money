@@ -13,6 +13,8 @@ import { createShapePropsMigrationIds, createShapePropsMigrationSequence } from 
 
 export const AMOUNT_TO_AREA_SCALE = 60
 export const MIN_BUDGET_BLOCK_SIZE = 1
+const FONT_STACK =
+  'var(--app-font-sans, Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)'
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
@@ -246,23 +248,24 @@ function BudgetBlockComponent({ shape }: BudgetBlockComponentProps) {
         width: w,
         height: h,
         backgroundColor,
-        border: '2px solid #000',
+        border: '2px solid var(--budget-block-border)',
         borderRadius: '4px',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: '12px',
-        fontWeight: 'bold',
+        fontWeight: '600',
+        fontFamily: FONT_STACK,
         color: 'white',
-        textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
+        textShadow: 'var(--budget-block-text-shadow, 1px 1px 2px rgba(0,0,0,0.5))',
         pointerEvents: 'all',
         padding: '6px',
         boxSizing: 'border-box',
         gap: '4px',
       }}
     >
-      <div style={{ fontSize: '10px', width: '100%', textAlign: 'center' }}>
+      <div style={{ fontSize: '10px', width: '100%', textAlign: 'center', fontFamily: FONT_STACK }}>
         {editingField === 'name' ? (
           <input
             ref={nameInputRef}
@@ -282,12 +285,14 @@ function BudgetBlockComponent({ shape }: BudgetBlockComponentProps) {
             style={{
               width: '100%',
               fontSize: '10px',
-              fontWeight: 'bold',
+              fontWeight: '600',
+              fontFamily: FONT_STACK,
               textAlign: 'center',
               borderRadius: '4px',
-              border: '1px solid rgba(0,0,0,0.2)',
+              border: '1px solid var(--budget-block-input-border)',
               padding: '2px 4px',
-              color: '#111827',
+              backgroundColor: 'var(--budget-block-input-bg)',
+              color: 'var(--budget-block-input-text)',
             }}
           />
         ) : (
@@ -306,6 +311,7 @@ function BudgetBlockComponent({ shape }: BudgetBlockComponentProps) {
       <div
         style={{
           fontSize: '14px',
+          fontFamily: FONT_STACK,
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
@@ -331,12 +337,14 @@ function BudgetBlockComponent({ shape }: BudgetBlockComponentProps) {
             style={{
               width: '64px',
               fontSize: '14px',
-              fontWeight: 'bold',
+              fontWeight: '600',
+              fontFamily: FONT_STACK,
               textAlign: 'left',
               borderRadius: '4px',
-              border: '1px solid rgba(0,0,0,0.2)',
+              border: '1px solid var(--budget-block-input-border)',
               padding: '2px 4px',
-              color: '#111827',
+              backgroundColor: 'var(--budget-block-input-bg)',
+              color: 'var(--budget-block-input-text)',
             }}
           />
         ) : (

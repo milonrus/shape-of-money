@@ -5,6 +5,7 @@ import { BudgetBlockUtil } from '../../lib/whiteboard/BudgetBlock';
 import { BudgetBlockTool } from '../../lib/whiteboard/BudgetBlockTool';
 import { BudgetStylePanel } from './BudgetStylePanel';
 import { BudgetContextMenu } from './BudgetContextMenu';
+import { useTheme, type ThemeMode } from '../../lib/theme/ThemeProvider';
 
 export type BudgetMode = 'select' | 'budget-block';
 
@@ -39,6 +40,14 @@ const uiOverrides: TLUiOverrides = {
 export function Whiteboard({ budgetMode, onEditorReady, persistenceKey }: WhiteboardProps) {
   const editorRef = useRef<Editor | null>(null);
   const persistenceId = persistenceKey ?? DEFAULT_PERSISTENCE_KEY;
+  const { mode } = useTheme();
+
+  const applyEditorTheme = useCallback((editor: Editor | null, themeMode: ThemeMode) => {
+    if (!editor) {
+      return;
+    }
+    editor.user.updateUserPreferences({ colorScheme: themeMode });
+  }, []);
 
   // Handle external mode changes from header buttons
   useEffect(() => {
@@ -55,20 +64,26 @@ export function Whiteboard({ budgetMode, onEditorReady, persistenceKey }: Whiteb
   const handleMount = useCallback(
     (editor: Editor) => {
       editorRef.current = editor;
+      applyEditorTheme(editor, mode);
       onEditorReady?.(editor);
     },
-    [onEditorReady]
+    [applyEditorTheme, mode, onEditorReady]
   );
 
+  useEffect(() => {
+    applyEditorTheme(editorRef.current, mode);
+  }, [applyEditorTheme, mode]);
+
   return (
-    <div className="w-full h-full relative">
-      <div className="w-full h-full pt-20">
+    <div className="relative h-full w-full bg-[var(--app-background)] transition-colors">
+      <div className="h-full w-full pt-20">
         <Tldraw
           persistenceKey={persistenceId}
           onMount={handleMount}
           shapeUtils={[BudgetBlockUtil]}
           tools={customTools}
           overrides={uiOverrides}
+          inferDarkMode={false}
           components={{
             StylePanel: BudgetStylePanel,
             ContextMenu: BudgetContextMenu,

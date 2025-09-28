@@ -66,32 +66,26 @@ function BudgetContextMenuContent() {
       .filter((shape): shape is BudgetBlockShape => shape.type === 'budget-block')
 
     if (budgetBlocks.length < 2) {
-      console.debug('[Treemap] Needs at least two budget blocks; got', budgetBlocks.length)
       return
     }
 
     const inputItems = budgetBlocks.map((shape) => {
-        const b = editor.getShapePageBounds(shape.id)!
-        return {
-          id: shape.id,
-          amount: shape.props.amount,
-          x: b.x,
-          y: b.y,
-          w: b.w,
-          h: b.h,
-        }
-      })
-
-    console.log('[Treemap] input items (first 3)', inputItems.slice(0, 3))
+      const b = editor.getShapePageBounds(shape.id)!
+      return {
+        id: shape.id,
+        amount: shape.props.amount,
+        x: b.x,
+        y: b.y,
+        w: b.w,
+        h: b.h,
+      }
+    })
 
     const layout = computeBudgetTreemapLayout(inputItems)
 
     if (layout.length === 0) {
-    console.log('[Treemap] Computed empty layout')
       return
     }
-
-    console.log('[Treemap] Applying layout to', layout.length, 'blocks', layout)
 
     const updates = layout.map((item) => {
       const minimumArea = MIN_BUDGET_BLOCK_SIZE * MIN_BUDGET_BLOCK_SIZE
@@ -127,17 +121,6 @@ function BudgetContextMenuContent() {
 
       const parentPoint = editor.getPointInParentSpace(item.id, { x: offsetX, y: offsetY })
 
-      console.log('[Treemap] layout result', {
-        id: item.id,
-        amount: item.amount,
-        width,
-        height,
-        area,
-        ratio,
-        targetCell: { w: item.w, h: item.h },
-        offset: { offsetX, offsetY },
-      })
-
       return {
         id: item.id,
         type: 'budget-block' as const,
@@ -149,8 +132,6 @@ function BudgetContextMenuContent() {
         },
       }
     })
-
-    console.log('[Treemap] applying updates', updates)
     editor.updateShapes(updates)
   }, [editor])
 

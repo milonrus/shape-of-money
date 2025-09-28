@@ -5,6 +5,23 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>shape-of-money</title>
+    <script>
+      const themeStorageKey = 'shape-of-money-theme';
+      try {
+        const storedTheme = localStorage.getItem(themeStorageKey);
+        const systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : systemPrefersDark ? 'dark' : 'light';
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+          document.documentElement.style.colorScheme = 'dark';
+        } else {
+          document.documentElement.classList.remove('dark');
+          document.documentElement.style.colorScheme = 'light';
+        }
+      } catch (error) {
+        // ignore preference initialization errors (e.g., storage access issues)
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

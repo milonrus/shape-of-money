@@ -110,27 +110,6 @@ export function computeBudgetTreemapLayout(
   const laidOutRoot = layout(root)
   const leaves = laidOutRoot.leaves()
 
-  const containerArea = containerWidth * containerHeight
-  const leafAreas = leaves.map((leaf) => {
-    const leafWidth = leaf.x1 - leaf.x0
-    const leafHeight = leaf.y1 - leaf.y0
-    return leafWidth * leafHeight
-  })
-  const sumLeafArea = leafAreas.reduce((sum, value) => sum + value, 0)
-  console.log('[TreemapLayout] container', {
-    totalArea,
-    containerWidth,
-    containerHeight,
-    containerArea,
-    sumLeafArea,
-    ratio: containerArea > 0 ? sumLeafArea / containerArea : 0,
-  })
-  console.log('[TreemapLayout] leaf areas vs values', leaves.map((leaf, index) => ({
-    id: leaf.data.id,
-    desired: leaf.value,
-    actual: leafAreas[index],
-  })))
-
   return leaves.map((leaf) => {
     const width = leaf.x1 - leaf.x0
     const height = leaf.y1 - leaf.y0
