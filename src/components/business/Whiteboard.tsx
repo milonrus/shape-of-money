@@ -1,7 +1,7 @@
 import { useCallback, useRef, useEffect } from 'react'
 import { Tldraw, Editor, createShapeId } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
-import { BudgetBlockUtil, type BudgetBlockShape } from '../../lib/whiteboard/BudgetBlock'
+import { BudgetBlockUtil, computeDimensionsForAmount, MIN_BUDGET_BLOCK_SIZE, type BudgetBlockShape } from '../../lib/whiteboard/BudgetBlock'
 import { BudgetStylePanel } from './BudgetStylePanel'
 
 type BudgetMode = 'select' | 'income' | 'expense'
@@ -35,14 +35,17 @@ export function Whiteboard({ budgetMode, onModeChange }: WhiteboardProps) {
     const color = type === 'income' ? 'green' : 'red'
 
     try {
+      const defaultAspectSeed = MIN_BUDGET_BLOCK_SIZE
+      const { w, h } = computeDimensionsForAmount(100, defaultAspectSeed, defaultAspectSeed)
+
       editor.createShape({
         id: shapeId,
         type: 'budget-block',
-        x: worldCenter.x + offsetX - 50, // Center the 100x100 rectangle
-        y: worldCenter.y + offsetY - 50,
+        x: worldCenter.x + offsetX - w / 2,
+        y: worldCenter.y + offsetY - h / 2,
         props: {
-          w: 100, // 100x100 pixels
-          h: 100,
+          w,
+          h,
           amount: 100,
           currency: '€',
           name: type === 'income' ? 'Income' : 'Expense',

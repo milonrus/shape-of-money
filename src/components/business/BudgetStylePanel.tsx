@@ -1,58 +1,86 @@
-import { useEditor, DefaultStylePanel, DefaultStylePanelContent } from '@tldraw/tldraw'
-import { useCallback } from 'react'
+import { useEditor, useValue, DefaultStylePanel, DefaultStylePanelContent } from '@tldraw/tldraw'
+import { useCallback, useRef, useEffect, useState, useMemo } from 'react'
 import type { BudgetBlockShape } from '../../lib/whiteboard/BudgetBlock'
+import { computeDimensionsForAmount } from '../../lib/whiteboard/BudgetBlock'
 
 export function BudgetStylePanel() {
   const editor = useEditor()
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const amountInputRef = useRef<HTMLInputElement>(null)
 
-  // Get selected shapes and filter for budget blocks
-  const selectedShapes = editor.getSelectedShapes()
-  const budgetBlocks = selectedShapes.filter(
-    (shape): shape is BudgetBlockShape => shape.type === 'budget-block'
+  // Local state for immediate UI feedback - decoupled from tldraw shape state
+  const [localName, setLocalName] = useState('')
+  const [localAmount, setLocalAmount] = useState('')
+
+  // Subscribe to selection changes so the panel reflects the latest state
+  const selectedShapes = useValue('budget-style-panel:selection', () => editor.getSelectedShapes(), [editor])
+  const budgetBlocks = useMemo(
+    () =>
+      selectedShapes.filter(
+        (shape): shape is BudgetBlockShape => shape.type === 'budget-block'
+      ),
+    [selectedShapes]
   )
 
-  // Define callbacks first to avoid hook ordering issues
-  const handleNameChange = useCallback((newName: string) => {
+  const budgetBlockSignature = budgetBlocks
+    .map(block => `${block.id}:${block.props.name}:${block.props.amount}`)
+    .join('|')
+
+  // Initialize local state when selection changes
+  useEffect(() => {
     const currentBudgetBlocks = editor.getSelectedShapes().filter(
       (shape): shape is BudgetBlockShape => shape.type === 'budget-block'
     )
-    editor.updateShapes(
-      currentBudgetBlocks.map(shape => ({
-        id: shape.id,
-        type: shape.type,
-        props: { ...shape.props, name: newName }
-      }))
+
+    if (currentBudgetBlocks.length === 0) {
+      setLocalName('')
+      setLocalAmount('')
+      return
+    }
+
+    const firstBlock = currentBudgetBlocks[0]
+    const allSameName = currentBudgetBlocks.every(block => block.props.name === firstBlock.props.name)
+    const allSameAmount = currentBudgetBlocks.every(block => block.props.amount === firstBlock.props.amount)
+
+    setLocalName(allSameName ? firstBlock.props.name : '')
+    setLocalAmount(allSameAmount ? firstBlock.props.amount.toString() : '')
+  }, [editor, budgetBlockSignature])
+
+  // Sync local state to tldraw shapes - only called on blur/enter
+  const syncNameToShape = useCallback((name: string) => {
+    const currentBudgetBlocks = editor.getSelectedShapes().filter(
+      (shape): shape is BudgetBlockShape => shape.type === 'budget-block'
     )
+    if (currentBudgetBlocks.length > 0) {
+      editor.updateShapes(
+        currentBudgetBlocks.map(shape => ({
+          id: shape.id,
+          props: { name }
+        }))
+      )
+    }
   }, [editor])
 
-  const handleAmountChange = useCallback((newAmount: number) => {
+  const syncAmountToShape = useCallback((amount: number) => {
     const currentBudgetBlocks = editor.getSelectedShapes().filter(
       (shape): shape is BudgetBlockShape => shape.type === 'budget-block'
     )
-    editor.updateShapes(
-      currentBudgetBlocks.map(shape => {
-        // Calculate new dimensions using the same logic as BudgetBlock
-        const globalScale = 1 // TODO: Get from store
-        const targetArea = newAmount * globalScale
-        const minSize = 24
+    if (currentBudgetBlocks.length > 0) {
+      editor.updateShapes(
+        currentBudgetBlocks.map(shape => {
+          const { w, h } = computeDimensionsForAmount(amount, shape.props.w, shape.props.h)
 
-        // Maintain current aspect ratio if possible
-        const currentAspectRatio = shape.props.w / shape.props.h
-        const newWidth = Math.max(minSize, Math.sqrt(targetArea * currentAspectRatio))
-        const newHeight = Math.max(minSize, targetArea / newWidth)
-
-        return {
-          id: shape.id,
-          type: shape.type,
-          props: {
-            ...shape.props,
-            amount: newAmount,
-            w: newWidth,
-            h: newHeight
+          return {
+            id: shape.id,
+            props: {
+              amount,
+              w,
+              h,
+            },
           }
-        }
-      })
-    )
+        })
+      )
+    }
   }, [editor])
 
   const handleTypeChange = useCallback((newType: 'income' | 'expense') => {
@@ -62,9 +90,7 @@ export function BudgetStylePanel() {
     editor.updateShapes(
       currentBudgetBlocks.map(shape => ({
         id: shape.id,
-        type: shape.type,
         props: {
-          ...shape.props,
           type: newType,
           color: newType === 'income' ? 'green' : 'red'
         }
@@ -73,6 +99,10 @@ export function BudgetStylePanel() {
   }, [editor])
 
   // If no budget blocks are selected, show default panel
+  if (selectedShapes.length === 0) {
+    return null
+  }
+
   if (budgetBlocks.length === 0) {
     return (
       <DefaultStylePanel>
@@ -85,10 +115,8 @@ export function BudgetStylePanel() {
   const hasMultiple = budgetBlocks.length > 1
   const firstBlock = budgetBlocks[0]
 
-  const allSameName = budgetBlocks.every(block => block.props.name === firstBlock.props.name)
-  const allSameAmount = budgetBlocks.every(block => block.props.amount === firstBlock.props.amount)
-  const allSameType = budgetBlocks.every(block => block.props.type === firstBlock.props.type)
-  const allSameCurrency = budgetBlocks.every(block => block.props.currency === firstBlock.props.currency)
+  const allSameType = hasMultiple ? budgetBlocks.every(block => block.props.type === firstBlock.props.type) : true
+  const allSameCurrency = hasMultiple ? budgetBlocks.every(block => block.props.currency === firstBlock.props.currency) : true
 
   return (
     <DefaultStylePanel>
@@ -106,11 +134,30 @@ export function BudgetStylePanel() {
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-600">Name</label>
           <input
+            ref={nameInputRef}
             type="text"
-            value={allSameName ? firstBlock.props.name : ''}
-            placeholder={allSameName ? '' : 'Mixed names'}
-            onChange={(e) => handleNameChange(e.target.value)}
-            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            value={localName}
+            placeholder={budgetBlocks.length > 1 ? 'Mixed names' : ''}
+            onChange={(e) => {
+              setLocalName(e.target.value)
+            }}
+            onBlur={(e) => {
+              syncNameToShape(e.target.value)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                syncNameToShape(localName)
+                e.currentTarget.blur()
+              }
+            }}
+            style={{
+              backgroundColor: '#fef3c7 !important',
+              border: '3px solid #ef4444 !important',
+              color: '#000000 !important',
+              fontWeight: 'bold !important',
+              fontSize: '14px !important'
+            }}
+            className="w-full px-2 py-1"
           />
         </div>
 
@@ -122,18 +169,38 @@ export function BudgetStylePanel() {
               {allSameCurrency ? firstBlock.props.currency : '?'}
             </span>
             <input
+              ref={amountInputRef}
               type="number"
               min="0"
               step="0.01"
-              value={allSameAmount ? firstBlock.props.amount : ''}
-              placeholder={allSameAmount ? '' : 'Mixed'}
+              value={localAmount}
+              placeholder={budgetBlocks.length > 1 ? 'Mixed' : ''}
               onChange={(e) => {
+                setLocalAmount(e.target.value)
+              }}
+              onBlur={(e) => {
                 const value = parseFloat(e.target.value)
                 if (!isNaN(value) && value >= 0) {
-                  handleAmountChange(value)
+                  syncAmountToShape(value)
                 }
               }}
-              className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const value = parseFloat(localAmount)
+                  if (!isNaN(value) && value >= 0) {
+                    syncAmountToShape(value)
+                    e.currentTarget.blur()
+                  }
+                }
+              }}
+              style={{
+                backgroundColor: '#fef3c7 !important',
+                border: '3px solid #ef4444 !important',
+                color: '#000000 !important',
+                fontWeight: 'bold !important',
+                fontSize: '14px !important'
+              }}
+              className="flex-1 px-2 py-1"
             />
           </div>
         </div>

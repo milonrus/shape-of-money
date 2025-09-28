@@ -1,4 +1,331 @@
-import { ShapeUtil, T, getDefaultColorTheme, HTMLContainer, Rectangle2d, type TLBaseShape } from '@tldraw/tldraw'
+import {
+  ShapeUtil,
+  T,
+  getDefaultColorTheme,
+  HTMLContainer,
+  Rectangle2d,
+  useEditor,
+  useValue,
+  type TLBaseShape,
+} from '@tldraw/tldraw'
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
+
+export const AMOUNT_TO_AREA_SCALE = 60
+export const MIN_BUDGET_BLOCK_SIZE = 64
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+
+const normalizeDimension = (value: number) =>
+  Number.isFinite(value) && value > 0 ? value : MIN_BUDGET_BLOCK_SIZE
+
+const enforceWidthPreference = (targetArea: number, widthCandidate: number) => {
+  const min = MIN_BUDGET_BLOCK_SIZE
+  const max = Math.max(min, targetArea / min)
+
+  let width = clamp(normalizeDimension(widthCandidate), min, max)
+  let height = clamp(targetArea / width, min, max)
+
+  width = clamp(targetArea / height, min, max)
+  height = clamp(targetArea / width, min, max)
+
+  return { w: width, h: height }
+}
+
+const enforceHeightPreference = (targetArea: number, heightCandidate: number) => {
+  const min = MIN_BUDGET_BLOCK_SIZE
+  const max = Math.max(min, targetArea / min)
+
+  let height = clamp(normalizeDimension(heightCandidate), min, max)
+  let width = clamp(targetArea / height, min, max)
+
+  height = clamp(targetArea / width, min, max)
+  width = clamp(targetArea / height, min, max)
+
+  return { w: width, h: height }
+}
+
+export function computeDimensionsForAmount(
+  amount: number,
+  currentWidth: number,
+  currentHeight: number
+): { w: number; h: number } {
+  const targetAmount = Math.max(amount, 0)
+  const targetArea = targetAmount * AMOUNT_TO_AREA_SCALE
+
+  if (targetArea <= 0) {
+    return {
+      w: MIN_BUDGET_BLOCK_SIZE,
+      h: MIN_BUDGET_BLOCK_SIZE,
+    }
+  }
+
+  const aspectRatio = currentWidth > 0 && currentHeight > 0 ? currentWidth / currentHeight : 1
+  const idealWidth = Math.sqrt(targetArea * aspectRatio)
+
+  return enforceWidthPreference(targetArea, idealWidth)
+}
+
+interface BudgetBlockComponentProps {
+  shape: BudgetBlockShape
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+function BudgetBlockComponent({ shape }: BudgetBlockComponentProps) {
+  const editor = useEditor()
+  const { w, h, amount, currency, name, type, color } = shape.props
+
+  const theme = getDefaultColorTheme({ isDarkMode: false })
+  const themeColor = theme[color as keyof typeof theme]
+  const colorValue =
+    typeof themeColor === 'object' && themeColor.solid ? themeColor.solid : type === 'income' ? '#22c55e' : '#ef4444'
+
+  const [editingField, setEditingField] = useState<'name' | 'amount' | null>(null)
+  const [nameDraft, setNameDraft] = useState(name)
+  const [amountDraft, setAmountDraft] = useState(String(amount))
+
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const amountInputRef = useRef<HTMLInputElement>(null)
+  const lastNameClickTs = useRef(0)
+  const lastAmountClickTs = useRef(0)
+
+  const isCanvasEditing = useValue(
+    `budget-block:${shape.id}:editing`,
+    () => editor.getEditingShapeId() === shape.id,
+    [editor, shape.id]
+  )
+
+  const beginEditing = useCallback(
+    (field: 'name' | 'amount') => {
+      setEditingField(field)
+      editor.setEditingShape(shape.id)
+    },
+    [editor, shape.id]
+  )
+
+  const endEditing = useCallback(() => {
+    setEditingField(null)
+    if (editor.getEditingShapeId() === shape.id) {
+      editor.setEditingShape(null)
+    }
+  }, [editor, shape.id])
+
+  useEffect(() => {
+    if (editingField !== 'name') {
+      setNameDraft(name)
+    }
+  }, [editingField, name])
+
+  useEffect(() => {
+    if (editingField !== 'amount') {
+      setAmountDraft(String(amount))
+    }
+  }, [amount, editingField])
+
+  useEffect(() => {
+    if (editingField === 'name') {
+      nameInputRef.current?.focus()
+      nameInputRef.current?.select()
+    }
+  }, [editingField])
+
+  useEffect(() => {
+    if (editingField === 'amount') {
+      amountInputRef.current?.focus()
+      amountInputRef.current?.select()
+    }
+  }, [editingField])
+
+  useEffect(() => {
+    if (!isCanvasEditing && editingField !== null) {
+      setEditingField(null)
+    }
+  }, [editingField, isCanvasEditing])
+
+  const commitName = useCallback(() => {
+    const trimmed = nameDraft.trim()
+    const nextValue = trimmed === '' ? name : trimmed
+
+    if (nextValue !== name) {
+      editor.updateShapes([
+        {
+          id: shape.id,
+          props: { name: nextValue },
+        },
+      ])
+    }
+
+    setNameDraft(nextValue)
+    endEditing()
+  }, [editor, endEditing, name, nameDraft, shape.id])
+
+  const cancelNameEdit = useCallback(() => {
+    setNameDraft(name)
+    endEditing()
+  }, [endEditing, name])
+
+  const commitAmount = useCallback(() => {
+    const parsed = parseFloat(amountDraft)
+
+    if (Number.isNaN(parsed) || parsed < 0) {
+      setAmountDraft(String(amount))
+      endEditing()
+      return
+    }
+
+    if (parsed !== amount) {
+      const { w: nextW, h: nextH } = computeDimensionsForAmount(parsed, w, h)
+
+      editor.updateShapes([
+        {
+          id: shape.id,
+          props: {
+            amount: parsed,
+            w: nextW,
+            h: nextH,
+          },
+        },
+      ])
+    }
+
+    setAmountDraft(String(parsed))
+    endEditing()
+  }, [amount, amountDraft, editor, endEditing, h, shape.id, w])
+
+  const cancelAmountEdit = useCallback(() => {
+    setAmountDraft(String(amount))
+    endEditing()
+  }, [amount, endEditing])
+
+  const handleDoubleClickCandidate = useCallback(
+    (event: PointerEvent, lastTimestampRef: MutableRefObject<number>, field: 'name' | 'amount') => {
+      const now = event.timeStamp
+      if (now - lastTimestampRef.current < 300) {
+        event.stopPropagation()
+        event.preventDefault()
+        beginEditing(field)
+        lastTimestampRef.current = 0
+      } else {
+        lastTimestampRef.current = now
+      }
+    },
+    [beginEditing]
+  )
+
+  return (
+    <div
+      style={{
+        width: w,
+        height: h,
+        backgroundColor: colorValue,
+        border: '2px solid #000',
+        borderRadius: '4px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        color: 'white',
+        textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
+        pointerEvents: 'all',
+        padding: '6px',
+        boxSizing: 'border-box',
+        gap: '4px',
+      }}
+    >
+      <div style={{ fontSize: '10px', width: '100%', textAlign: 'center' }}>
+        {editingField === 'name' ? (
+          <input
+            ref={nameInputRef}
+            value={nameDraft}
+            onChange={(event) => setNameDraft(event.target.value)}
+            onBlur={commitName}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                commitName()
+              } else if (event.key === 'Escape') {
+                event.preventDefault()
+                cancelNameEdit()
+              }
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            style={{
+              width: '100%',
+              fontSize: '10px',
+              fontWeight: 'bold',
+              textAlign: 'center',
+              borderRadius: '4px',
+              border: '1px solid rgba(0,0,0,0.2)',
+              padding: '2px 4px',
+              color: '#111827',
+            }}
+          />
+        ) : (
+          <span
+            onPointerDown={(event) => handleDoubleClickCandidate(event.nativeEvent, lastNameClickTs, 'name')}
+            onDoubleClick={(event) => {
+              event.stopPropagation()
+              beginEditing('name')
+            }}
+            style={{ cursor: 'text' }}
+          >
+            {name}
+          </span>
+        )}
+      </div>
+      <div
+        style={{
+          fontSize: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+        }}
+      >
+        <span>{currency}</span>
+        {editingField === 'amount' ? (
+          <input
+            ref={amountInputRef}
+            value={amountDraft}
+            onChange={(event) => setAmountDraft(event.target.value)}
+            onBlur={commitAmount}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                commitAmount()
+              } else if (event.key === 'Escape') {
+                event.preventDefault()
+                cancelAmountEdit()
+              }
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            style={{
+              width: '64px',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              textAlign: 'left',
+              borderRadius: '4px',
+              border: '1px solid rgba(0,0,0,0.2)',
+              padding: '2px 4px',
+              color: '#111827',
+            }}
+          />
+        ) : (
+          <span
+            onPointerDown={(event) => handleDoubleClickCandidate(event.nativeEvent, lastAmountClickTs, 'amount')}
+            onDoubleClick={(event) => {
+              event.stopPropagation()
+              beginEditing('amount')
+            }}
+            style={{ cursor: 'text' }}
+          >
+            {amount}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
 
 // Props definition for the budget block shape
 const budgetBlockProps = {
@@ -32,10 +359,13 @@ export class BudgetBlockUtil extends ShapeUtil<BudgetBlockShape> {
 
   // Default props
   getDefaultProps(): BudgetBlockShape['props'] {
+    const defaultAmount = 100
+    const { w, h } = computeDimensionsForAmount(defaultAmount, 1, 1)
+
     return {
-      w: 100,
-      h: 100,
-      amount: 100,
+      w,
+      h,
+      amount: defaultAmount,
       currency: '€',
       name: 'Budget Item',
       type: 'income',
@@ -45,16 +375,7 @@ export class BudgetBlockUtil extends ShapeUtil<BudgetBlockShape> {
 
   // Helper method to calculate dimensions from amount while maintaining aspect ratio
   calculateDimensionsFromAmount(amount: number, currentW: number, currentH: number): { w: number, h: number } {
-    const globalScale = 1 // TODO: Get from store
-    const targetArea = amount * globalScale
-    const minSize = 24
-
-    // Maintain current aspect ratio if possible
-    const currentAspectRatio = currentW / currentH
-    const newWidth = Math.max(minSize, Math.sqrt(targetArea * currentAspectRatio))
-    const newHeight = Math.max(minSize, targetArea / newWidth)
-
-    return { w: newWidth, h: newHeight }
+    return computeDimensionsForAmount(amount, currentW, currentH)
   }
 
   // Geometry for bounds
@@ -80,37 +401,9 @@ export class BudgetBlockUtil extends ShapeUtil<BudgetBlockShape> {
 
   // React component that renders the shape
   component(shape: BudgetBlockShape) {
-    const { w, h, amount, currency, name, type, color } = shape.props
-
-    const theme = getDefaultColorTheme({ isDarkMode: false })
-    const themeColor = theme[color as keyof typeof theme]
-    const colorValue = (typeof themeColor === 'object' && themeColor.solid) ? themeColor.solid : (type === 'income' ? '#22c55e' : '#ef4444')
-
     return (
       <HTMLContainer>
-        <div
-          style={{
-            width: w,
-            height: h,
-            backgroundColor: colorValue,
-            border: '2px solid #000',
-            borderRadius: '4px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '12px',
-            fontWeight: 'bold',
-            color: 'white',
-            textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
-            pointerEvents: 'all',
-          }}
-        >
-          <div style={{ fontSize: '10px', marginBottom: '2px' }}>{name}</div>
-          <div style={{ fontSize: '14px' }}>
-            {currency}{amount}
-          </div>
-        </div>
+        <BudgetBlockComponent shape={shape} />
       </HTMLContainer>
     )
   }
@@ -133,45 +426,34 @@ export class BudgetBlockUtil extends ShapeUtil<BudgetBlockShape> {
   // Handle resize while maintaining area constraint
   override onResize: ShapeUtil<BudgetBlockShape>['onResize'] = (shape, info) => {
     const { amount } = shape.props
-    const globalScale = 1 // TODO: Get from store
-    const targetArea = amount * globalScale
-    const minSize = 24
+    const targetArea = Math.max(amount, 0) * AMOUNT_TO_AREA_SCALE
 
-    // Get the proposed new dimensions
-    const { scaleX, scaleY } = info
-    const proposedW = Math.max(minSize, shape.props.w * scaleX)
-    const proposedH = Math.max(minSize, shape.props.h * scaleY)
-
-    // Determine which dimension changed more to prioritize that direction
-    const wChange = Math.abs(scaleX - 1)
-    const hChange = Math.abs(scaleY - 1)
-
-    let newW: number, newH: number
-
-    if (wChange > hChange) {
-      // Width changed more, keep new width and adjust height
-      newW = proposedW
-      newH = Math.max(minSize, targetArea / newW)
-    } else {
-      // Height changed more, keep new height and adjust width
-      newH = proposedH
-      newW = Math.max(minSize, targetArea / newH)
+    if (targetArea <= 0) {
+      return {
+        props: {
+          ...shape.props,
+          w: MIN_BUDGET_BLOCK_SIZE,
+          h: MIN_BUDGET_BLOCK_SIZE,
+        },
+      }
     }
+
+    const { scaleX, scaleY } = info
+    const prioritizeWidth = Math.abs(scaleX - 1) >= Math.abs(scaleY - 1)
+
+    const { w, h } = prioritizeWidth
+      ? enforceWidthPreference(targetArea, shape.props.w * scaleX)
+      : enforceHeightPreference(targetArea, shape.props.h * scaleY)
 
     return {
       props: {
         ...shape.props,
-        w: newW,
-        h: newH,
+        w,
+        h,
       },
     }
   }
 
-  // Handle double-click to edit
-  override onDoubleClick = (shape: BudgetBlockShape) => {
-    // This could open an edit dialog
-    console.log('Double-clicked budget block:', shape.props.name)
-  }
 }
 
 // Migrations for shape data - using default migrations
