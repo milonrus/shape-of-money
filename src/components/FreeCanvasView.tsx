@@ -5,13 +5,11 @@ import { Whiteboard, type BudgetMode } from './business/Whiteboard';
 type FreeCanvasViewProps = {
   budgetMode: BudgetMode;
   onModeChange: (mode: BudgetMode) => void;
-  onBackToDashboard: () => void;
 };
 
 export const FreeCanvasView: FC<FreeCanvasViewProps> = ({
   budgetMode,
   onModeChange,
-  onBackToDashboard,
 }) => {
   const handleBudgetBlockMode = () => {
     onModeChange('budget-block');
@@ -25,18 +23,9 @@ export const FreeCanvasView: FC<FreeCanvasViewProps> = ({
     <div className="flex h-screen w-full flex-col bg-[var(--app-background)] text-[var(--app-text-primary)] transition-colors">
       <header className="border-b border-slate-200 bg-[var(--app-surface)] px-6 py-4 shadow-sm transition-colors dark:border-slate-700 dark:bg-[var(--app-surface-muted)]">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-6">
-            <button
-              type="button"
-              onClick={onBackToDashboard}
-              className="w-fit rounded-lg border border-slate-300 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:focus:ring-slate-500"
-            >
-              Back to dashboard
-            </button>
-            <div>
-              <h1 className="text-2xl font-bold text-[var(--app-text-primary)]">Shape of Money</h1>
-              <p className="text-sm text-[var(--app-text-secondary)]">Visual budgeting whiteboard</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold text-[var(--app-text-primary)]">Shape of Money</h1>
+            <p className="text-sm text-[var(--app-text-secondary)]">Visual budgeting whiteboard</p>
           </div>
 
           <div className="flex items-center gap-3">
