@@ -65,12 +65,3 @@
 .dark .tl-container {
   background-color: var(--app-surface);
 }
-
-/* Override tldraw UI positioning to avoid overlap with header */
-.tlui-layout__top {
-  top: 80px !important;
-}
-
-.tlui-layout__top-left {
-  top: 80px !important;
-}

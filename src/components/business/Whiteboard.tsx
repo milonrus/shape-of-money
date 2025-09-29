@@ -484,7 +484,7 @@ export function Whiteboard({
 
   return (
     <div className="relative h-full w-full bg-[var(--app-background)] transition-colors">
-      <div className="h-full w-full pt-20">
+      <div className="h-full w-full">
         <Tldraw
           persistenceKey={persistenceId}
           onMount={handleMount}
@@ -493,6 +493,7 @@ export function Whiteboard({
           overrides={uiOverrides}
           inferDarkMode={false}
           components={{
+            MenuPanel: null,
             StylePanel: BudgetStylePanel,
             ContextMenu: BudgetContextMenu,
           }}
