@@ -1,6 +1,7 @@
+import { useCallback, useMemo, useState } from 'react';
 import type { FC } from 'react';
 import { ThemeToggle } from './ThemeToggle';
-import { Whiteboard, type BudgetMode } from './business/Whiteboard';
+import { Whiteboard, type BudgetMode, type FrameBudgetSummary } from './business/Whiteboard';
 
 type FreeCanvasViewProps = {
   budgetMode: BudgetMode;
@@ -11,6 +12,66 @@ export const FreeCanvasView: FC<FreeCanvasViewProps> = ({
   budgetMode,
   onModeChange,
 }) => {
+  const [frameSummary, setFrameSummary] = useState<FrameBudgetSummary | null>(null);
+
+  const handleFrameSummaryChange = useCallback((summary: FrameBudgetSummary | null) => {
+    setFrameSummary((previous) => {
+      if (!previous && !summary) {
+        return previous;
+      }
+
+      if (previous && summary) {
+        const unchanged =
+          previous.frameId === summary.frameId &&
+          previous.frameName === summary.frameName &&
+          previous.currency === summary.currency &&
+          previous.total === summary.total &&
+          previous.budgetBlockCount === summary.budgetBlockCount;
+
+        if (unchanged) {
+          return previous;
+        }
+      }
+
+      return summary;
+    });
+  }, []);
+
+  const frameTotalDisplay = useMemo(() => {
+    if (!frameSummary) {
+      return {
+        label: '—',
+        title: 'Select a frame to view its budget total',
+      };
+    }
+
+    const formatter = new Intl.NumberFormat(undefined, {
+      maximumFractionDigits: 2,
+    });
+
+    const amountText = formatter.format(frameSummary.total);
+    const currencyPrefix = frameSummary.currency ?? '';
+
+    const details: string[] = [];
+    if (frameSummary.frameName.trim().length > 0) {
+      details.push(`Frame: ${frameSummary.frameName}`);
+    }
+
+    const blocksLabel = `${frameSummary.budgetBlockCount} budget block${
+      frameSummary.budgetBlockCount === 1 ? '' : 's'
+    }`;
+    details.push(blocksLabel);
+
+    if (!frameSummary.currency && frameSummary.budgetBlockCount > 0) {
+      details.push('Mixed currencies');
+    }
+
+    return {
+      label: `${currencyPrefix}${amountText}`,
+      title: details.join(' • '),
+    };
+  }, [frameSummary]);
+
   const handleBudgetBlockMode = () => {
     onModeChange('budget-block');
   };
@@ -53,6 +114,13 @@ export const FreeCanvasView: FC<FreeCanvasViewProps> = ({
               Select
             </button>
             <ThemeToggle size="compact" />
+            <div
+              className="flex items-center gap-1 text-sm font-medium text-[var(--app-text-primary)]"
+              title={frameTotalDisplay.title || undefined}
+            >
+              <span className="text-[var(--app-text-secondary)]">Frame total:</span>
+              <span>{frameTotalDisplay.label}</span>
+            </div>
           </div>
         </div>
 
@@ -67,7 +135,11 @@ export const FreeCanvasView: FC<FreeCanvasViewProps> = ({
       </header>
 
       <main className="flex-1 overflow-hidden bg-[var(--app-background)] transition-colors">
-        <Whiteboard budgetMode={budgetMode} onModeChange={onModeChange} />
+        <Whiteboard
+          budgetMode={budgetMode}
+          onModeChange={onModeChange}
+          onFrameBudgetSummaryChange={handleFrameSummaryChange}
+        />
       </main>
     </div>
   );

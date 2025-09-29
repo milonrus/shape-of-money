@@ -374,6 +374,8 @@ const budgetBlockProps = {
   type: T.literalEnum('income', 'expense'),
   color: T.string,
   opacity: T.number,
+  isSavingsBlock: T.boolean,
+  sourceFrameId: T.string,
 }
 
 // Type definition for the budget block shape
@@ -388,6 +390,8 @@ export type BudgetBlockShape = TLBaseShape<
     type: 'income' | 'expense'
     color: string
     opacity: number
+    isSavingsBlock: boolean
+    sourceFrameId: string
   }
 >
 
@@ -410,6 +414,8 @@ export class BudgetBlockUtil extends ShapeUtil<BudgetBlockShape> {
       type: 'income',
       color: 'green',
       opacity: 1,
+      isSavingsBlock: false,
+      sourceFrameId: '',
     }
   }
 
@@ -499,6 +505,7 @@ export class BudgetBlockUtil extends ShapeUtil<BudgetBlockShape> {
 // Migrations for shape data - using default migrations
 const Versions = createShapePropsMigrationIds('budget-block', {
   AddOpacity: 1,
+  AddSavingsBlock: 2,
 })
 
 export const budgetBlockMigrations = createShapePropsMigrationSequence({
@@ -512,6 +519,21 @@ export const budgetBlockMigrations = createShapePropsMigrationSequence({
       },
       down: (props) => {
         delete (props as Partial<BudgetBlockShape['props']>).opacity
+      },
+    },
+    {
+      id: Versions.AddSavingsBlock,
+      up: (props) => {
+        if (props.isSavingsBlock === undefined) {
+          props.isSavingsBlock = false
+        }
+        if (props.sourceFrameId === undefined) {
+          props.sourceFrameId = ''
+        }
+      },
+      down: (props) => {
+        delete (props as Partial<BudgetBlockShape['props']>).isSavingsBlock
+        delete (props as Partial<BudgetBlockShape['props']>).sourceFrameId
       },
     },
   ],
