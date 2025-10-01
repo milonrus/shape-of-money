@@ -139,24 +139,33 @@ export function BudgetStylePanel() {
     )
   }, [editor])
 
-  const handleTypeChange = useCallback((newType: 'income' | 'expense') => {
+  const handleTypeChange = useCallback((newType: 'income' | 'expense' | 'savings') => {
     const currentBudgetBlocks = editor.getSelectedShapes().filter(
       (shape): shape is BudgetBlockShape => shape.type === 'budget-block'
     )
     editor.updateShapes(
-      currentBudgetBlocks.map(shape => ({
-        id: shape.id,
-        type: 'budget-block' as const,
-        props: {
-          type: newType,
-          color:
-            shape.props.color === (shape.props.type === 'income' ? 'green' : 'red')
-              ? newType === 'income'
-                ? 'green'
-                : 'red'
-              : shape.props.color,
-        },
-      }))
+      currentBudgetBlocks.map(shape => {
+        // Auto-update color if it matches the old type's default color
+        let newColor = shape.props.color
+        const oldType = shape.props.type
+
+        if (
+          (oldType === 'income' && shape.props.color === 'green') ||
+          (oldType === 'expense' && shape.props.color === 'red') ||
+          (oldType === 'savings' && shape.props.color === 'blue')
+        ) {
+          newColor = newType === 'income' ? 'green' : newType === 'expense' ? 'red' : 'blue'
+        }
+
+        return {
+          id: shape.id,
+          type: 'budget-block' as const,
+          props: {
+            type: newType,
+            color: newColor,
+          },
+        }
+      })
     )
   }, [editor])
 
@@ -168,7 +177,7 @@ export function BudgetStylePanel() {
   const firstBlockName = firstBlock?.props.name ?? ''
   const firstBlockAmount = firstBlock?.props.amount ?? 0
   const firstBlockCurrency = firstBlock?.props.currency ?? ''
-  const firstBlockType: 'income' | 'expense' = firstBlock?.props.type ?? 'income'
+  const firstBlockType: 'income' | 'expense' | 'savings' = firstBlock?.props.type ?? 'income'
   const firstBlockColor = firstBlock?.props.color ?? 'green'
   const firstBlockOpacity = firstBlock?.props.opacity ?? 1
 
@@ -326,17 +335,20 @@ export function BudgetStylePanel() {
   const baseTypeButtonClasses =
     'flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[var(--tl-color-focus)]'
 
-  const typeButtonClass = (isActive: boolean, tone: 'income' | 'expense') => {
+  const typeButtonClass = (isActive: boolean, tone: 'income' | 'expense' | 'savings') => {
     const activeTone =
       tone === 'income'
         ? 'bg-green-500/90 border-green-500 text-white shadow-sm'
-        : 'bg-red-500/90 border-red-500 text-white shadow-sm'
+        : tone === 'expense'
+          ? 'bg-red-500/90 border-red-500 text-white shadow-sm'
+          : 'bg-blue-500/90 border-blue-500 text-white shadow-sm'
     const inactiveTone = 'border-[var(--tl-color-divider)] bg-[var(--tl-color-muted-1)] text-[var(--tl-color-text-1)] hover:bg-[var(--tl-color-muted-2)]'
     return `${baseTypeButtonClasses} ${isActive ? activeTone : inactiveTone}`
   }
 
   const incomeActive = allSameType && firstBlockType === 'income'
   const expenseActive = allSameType && firstBlockType === 'expense'
+  const savingsActive = allSameType && firstBlockType === 'savings'
 
   return (
     <DefaultStylePanel>
@@ -463,6 +475,13 @@ export function BudgetStylePanel() {
             className={typeButtonClass(expenseActive, 'expense')}
           >
             Expense
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTypeChange('savings')}
+            className={typeButtonClass(savingsActive, 'savings')}
+          >
+            Savings
           </button>
         </div>
         {!allSameType && (

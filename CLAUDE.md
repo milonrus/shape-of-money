@@ -98,12 +98,13 @@ src/
 type Item = {
   id: string
   name: string
-  type: "income" | "expense"
+  type: "income" | "expense" | "savings"
   amount: number
   color: string
   recurrence: Recurrence
   date?: string // for one-time items
   currency: string
+  sourceFrameId: string // for savings blocks linked to frames
   // Geometry (persisted for manual layout)
   x: number, y: number, w: number, h: number
 }
@@ -247,6 +248,7 @@ tests/e2e/
 - **Month boundaries**: Recurrence calculations at month edges
 - **Currency changes**: Recalculate scale when switching currencies
 - **Scale extremes**: Handle very large/small amounts gracefully
+- **Savings blocks**: Auto-sync with source frame (income - expense), excluded from frame totals
 
 ### Performance
 - **Large datasets**: 100+ items should still be responsive
@@ -256,8 +258,9 @@ tests/e2e/
 ## Design Principles
 
 ### Visual Hierarchy
-- **Income**: Green colors, positive visual weight
-- **Expenses**: Red/orange colors, show as subtractions
+- **Income**: Green colors (#22c55e), dotted pattern, positive visual weight
+- **Expenses**: Red colors (#ef4444), solid fill, show as subtractions
+- **Savings**: Blue colors (#3b82f6), diagonal stripe pattern, auto-calculated from frames
 - **Balance**: Prominent display, color-coded (green/red)
 - **Typography**: Clear amount formatting with currency symbols
 

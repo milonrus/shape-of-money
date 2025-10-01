@@ -11,6 +11,8 @@ type BudgetBlockAggregate = {
   expenseTotal: number;
   incomeCount: number;
   expenseCount: number;
+  savingsTotal: number;
+  savingsCount: number;
 };
 
 type FrameBudgetSummary = {
@@ -21,8 +23,10 @@ type FrameBudgetSummary = {
   budgetBlockCount: number;
   incomeTotal: number;
   expenseTotal: number;
+  savingsTotal: number;
   hasIncome: boolean;
   hasExpense: boolean;
+  hasSavings: boolean;
 };
 
 const isFrameShape = (shape: TLShape | null | undefined): shape is TLFrameShape =>
@@ -40,6 +44,8 @@ function collectBudgetBlockData(editor: ReturnType<typeof useEditor>, parentId: 
     expenseTotal: 0,
     incomeCount: 0,
     expenseCount: 0,
+    savingsTotal: 0,
+    savingsCount: 0,
   };
 
   const childIds = editor.getSortedChildIdsForParent(parentId);
@@ -49,6 +55,11 @@ function collectBudgetBlockData(editor: ReturnType<typeof useEditor>, parentId: 
     if (!child) continue;
 
     if (isBudgetBlockShape(child)) {
+      // Skip savings blocks when they're inside their source frame
+      if (child.props.type === 'savings' && child.props.sourceFrameId === parentId) {
+        continue;
+      }
+
       const rawAmount = child.props.amount;
       const amount = typeof rawAmount === 'number' && Number.isFinite(rawAmount) ? rawAmount : 0;
       const blockType = child.props.type;
@@ -62,6 +73,10 @@ function collectBudgetBlockData(editor: ReturnType<typeof useEditor>, parentId: 
       } else if (blockType === 'expense') {
         aggregate.expenseTotal += amount;
         aggregate.expenseCount += 1;
+      } else if (blockType === 'savings') {
+        // Track incoming savings (from other frames)
+        aggregate.savingsTotal += amount;
+        aggregate.savingsCount += 1;
       }
 
       const currency = child.props.currency;
@@ -78,6 +93,8 @@ function collectBudgetBlockData(editor: ReturnType<typeof useEditor>, parentId: 
       aggregate.expenseTotal += nested.expenseTotal;
       aggregate.incomeCount += nested.incomeCount;
       aggregate.expenseCount += nested.expenseCount;
+      aggregate.savingsTotal += nested.savingsTotal;
+      aggregate.savingsCount += nested.savingsCount;
       nested.currencies.forEach((value) => aggregate.currencies.add(value));
     }
   }
@@ -113,8 +130,10 @@ function computeFrameBudgetSummary(editor: ReturnType<typeof useEditor>, frame: 
     budgetBlockCount: aggregate.count,
     incomeTotal: aggregate.incomeTotal,
     expenseTotal: aggregate.expenseTotal,
+    savingsTotal: aggregate.savingsTotal,
     hasIncome: aggregate.incomeCount > 0,
     hasExpense: aggregate.expenseCount > 0,
+    hasSavings: aggregate.savingsCount > 0,
   };
 }
 
@@ -172,9 +191,9 @@ export function FrameInfoPanel() {
   return (
     <>
       {framesWithData.map(({ summary, screenPosition }) => {
-        const hasBothTypes = summary.hasIncome && summary.hasExpense;
+        const hasBreakdown = summary.hasSavings || (summary.hasIncome && summary.hasExpense);
         const currencySymbol = summary.currency ?? '';
-        const left = summary.incomeTotal - summary.expenseTotal;
+        const left = summary.savingsTotal + summary.incomeTotal - summary.expenseTotal;
 
         return (
           <div
@@ -206,26 +225,41 @@ export function FrameInfoPanel() {
                 </div>
               )}
 
-              {hasBothTypes ? (
-                // Show breakdown when both income and expense exist
+              {hasBreakdown ? (
+                // Show breakdown when there are savings, income, or expenses
                 <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold" style={{ color: '#22c55e' }}>
-                      Income
-                    </span>
-                    <span className="text-lg font-bold" style={{ color: '#22c55e' }}>
-                      {currencySymbol}{formatter.format(summary.incomeTotal)}
-                    </span>
-                  </div>
+                  {summary.hasSavings && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold" style={{ color: '#3b82f6' }}>
+                        Savings in
+                      </span>
+                      <span className="text-lg font-bold" style={{ color: '#3b82f6' }}>
+                        {currencySymbol}{formatter.format(summary.savingsTotal)}
+                      </span>
+                    </div>
+                  )}
 
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold" style={{ color: '#ef4444' }}>
-                      Expenses
-                    </span>
-                    <span className="text-lg font-bold" style={{ color: '#ef4444' }}>
-                      {currencySymbol}{formatter.format(summary.expenseTotal)}
-                    </span>
-                  </div>
+                  {summary.hasIncome && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold" style={{ color: '#22c55e' }}>
+                        Income
+                      </span>
+                      <span className="text-lg font-bold" style={{ color: '#22c55e' }}>
+                        {currencySymbol}{formatter.format(summary.incomeTotal)}
+                      </span>
+                    </div>
+                  )}
+
+                  {summary.hasExpense && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold" style={{ color: '#ef4444' }}>
+                        Expenses
+                      </span>
+                      <span className="text-lg font-bold" style={{ color: '#ef4444' }}>
+                        {currencySymbol}{formatter.format(summary.expenseTotal)}
+                      </span>
+                    </div>
+                  )}
 
                   <div
                     className="h-px"
@@ -234,7 +268,7 @@ export function FrameInfoPanel() {
 
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-bold" style={{ color: 'var(--tl-color-text)' }}>
-                      Left
+                      Savings left
                     </span>
                     <span
                       className="text-xl font-bold"

@@ -81,7 +81,13 @@ function BudgetBlockComponent({ shape }: BudgetBlockComponentProps) {
   const theme = getDefaultColorTheme({ isDarkMode: false })
   const themeColor = theme[color as keyof typeof theme]
   const colorValue =
-    typeof themeColor === 'object' && themeColor.solid ? themeColor.solid : type === 'income' ? '#22c55e' : '#ef4444'
+    typeof themeColor === 'object' && themeColor.solid
+      ? themeColor.solid
+      : type === 'income'
+        ? '#22c55e'
+        : type === 'expense'
+          ? '#ef4444'
+          : '#3b82f6' // blue for savings
 
   const hexToRgba = (hex: string, alpha: number) => {
     const cleaned = hex.replace('#', '')
@@ -108,10 +114,12 @@ function BudgetBlockComponent({ shape }: BudgetBlockComponentProps) {
 
   const backgroundColor = hexToRgba(colorValue, 0.3)
 
-  // Create dotted pattern for income blocks
+  // Create patterns for different block types
   const backgroundImage = type === 'income'
     ? `radial-gradient(circle, ${colorValue} 1.5px, transparent 1.5px)`
-    : 'none'
+    : type === 'savings'
+      ? `repeating-linear-gradient(45deg, ${colorValue}, ${colorValue} 2px, transparent 2px, transparent 8px)`
+      : 'none'
   const backgroundSize = type === 'income' ? '12px 12px' : 'auto'
 
   const [editingField, setEditingField] = useState<'name' | 'amount' | null>(null)
@@ -379,10 +387,9 @@ const budgetBlockProps = {
   amount: T.positiveNumber,
   currency: T.string,
   name: T.string,
-  type: T.literalEnum('income', 'expense'),
+  type: T.literalEnum('income', 'expense', 'savings'),
   color: T.string,
   opacity: T.number,
-  isSavingsBlock: T.boolean,
   sourceFrameId: T.string,
 }
 
@@ -395,10 +402,9 @@ export type BudgetBlockShape = TLBaseShape<
     amount: number
     currency: string
     name: string
-    type: 'income' | 'expense'
+    type: 'income' | 'expense' | 'savings'
     color: string
     opacity: number
-    isSavingsBlock: boolean
     sourceFrameId: string
   }
 >
@@ -422,7 +428,6 @@ export class BudgetBlockUtil extends ShapeUtil<BudgetBlockShape> {
       type: 'income',
       color: 'green',
       opacity: 1,
-      isSavingsBlock: false,
       sourceFrameId: '',
     }
   }
@@ -514,6 +519,7 @@ export class BudgetBlockUtil extends ShapeUtil<BudgetBlockShape> {
 const Versions = createShapePropsMigrationIds('budget-block', {
   AddOpacity: 1,
   AddSavingsBlock: 2,
+  ConvertSavingsToType: 3,
 })
 
 export const budgetBlockMigrations = createShapePropsMigrationSequence({
@@ -542,6 +548,36 @@ export const budgetBlockMigrations = createShapePropsMigrationSequence({
       down: (props) => {
         delete (props as Partial<BudgetBlockShape['props']>).isSavingsBlock
         delete (props as Partial<BudgetBlockShape['props']>).sourceFrameId
+      },
+    },
+    {
+      id: Versions.ConvertSavingsToType,
+      up: (props) => {
+        // Convert old isSavingsBlock flag to new savings type
+        if (props.isSavingsBlock === true) {
+          props.type = 'savings'
+          if (props.color === 'green') {
+            props.color = 'blue'
+          }
+        }
+        // Remove the old flag
+        delete (props as any).isSavingsBlock
+        // Ensure sourceFrameId exists
+        if (props.sourceFrameId === undefined) {
+          props.sourceFrameId = ''
+        }
+      },
+      down: (props) => {
+        // Convert savings type back to income with flag
+        if (props.type === 'savings') {
+          props.type = 'income'
+          props.isSavingsBlock = true
+          if (props.color === 'blue') {
+            props.color = 'green'
+          }
+        } else {
+          props.isSavingsBlock = false
+        }
       },
     },
   ],

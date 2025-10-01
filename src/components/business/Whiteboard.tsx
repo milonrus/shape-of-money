@@ -57,6 +57,8 @@ type BudgetBlockAggregate = {
   expenseTotal: number;
   incomeCount: number;
   expenseCount: number;
+  savingsTotal: number;
+  savingsCount: number;
 };
 
 const isFrameShape = (shape: TLShape | null | undefined): shape is TLFrameShape =>
@@ -77,6 +79,8 @@ const collectBudgetBlockData = (editor: Editor, parentId: TLParentId): BudgetBlo
     expenseTotal: 0,
     incomeCount: 0,
     expenseCount: 0,
+    savingsTotal: 0,
+    savingsCount: 0,
   };
 
   const childIds = editor.getSortedChildIdsForParent(parentId);
@@ -87,7 +91,7 @@ const collectBudgetBlockData = (editor: Editor, parentId: TLParentId): BudgetBlo
 
     if (isBudgetBlockShape(child)) {
       // Skip savings blocks when they're inside their source frame
-      if (child.props.isSavingsBlock && child.props.sourceFrameId === parentId) {
+      if (child.props.type === 'savings' && child.props.sourceFrameId === parentId) {
         continue;
       }
 
@@ -104,6 +108,10 @@ const collectBudgetBlockData = (editor: Editor, parentId: TLParentId): BudgetBlo
       } else if (blockType === 'expense') {
         aggregate.expenseTotal += amount;
         aggregate.expenseCount += 1;
+      } else if (blockType === 'savings') {
+        // Track incoming savings (from other frames)
+        aggregate.savingsTotal += amount;
+        aggregate.savingsCount += 1;
       }
 
       const currency = child.props.currency;
@@ -120,6 +128,8 @@ const collectBudgetBlockData = (editor: Editor, parentId: TLParentId): BudgetBlo
       aggregate.expenseTotal += nested.expenseTotal;
       aggregate.incomeCount += nested.incomeCount;
       aggregate.expenseCount += nested.expenseCount;
+      aggregate.savingsTotal += nested.savingsTotal;
+      aggregate.savingsCount += nested.savingsCount;
       nested.currencies.forEach((value) => aggregate.currencies.add(value));
     }
   }
@@ -247,9 +257,11 @@ function syncFrameSummaryShapes(editor: Editor) {
           frameName: frame.props.name || '',
           incomeTotal: aggregate.incomeTotal,
           expenseTotal: aggregate.expenseTotal,
+          savingsTotal: aggregate.savingsTotal,
           currency,
           hasIncome: aggregate.incomeCount > 0,
           hasExpense: aggregate.expenseCount > 0,
+          hasSavings: aggregate.savingsCount > 0,
           // Preserve the flag if it exists, default to false for legacy shapes
           isManuallyPositioned: existingSummary.props.isManuallyPositioned ?? false,
         },
@@ -276,9 +288,11 @@ function syncFrameSummaryShapes(editor: Editor) {
           frameName: frame.props.name || '',
           incomeTotal: aggregate.incomeTotal,
           expenseTotal: aggregate.expenseTotal,
+          savingsTotal: aggregate.savingsTotal,
           currency,
           hasIncome: aggregate.incomeCount > 0,
           hasExpense: aggregate.expenseCount > 0,
+          hasSavings: aggregate.savingsCount > 0,
           isManuallyPositioned: false,
         },
       });
@@ -298,7 +312,7 @@ function syncSavingsBlocks(editor: Editor) {
   const allShapes = editor.getCurrentPageShapes();
   const savingsBlocks = allShapes.filter(
     (shape): shape is BudgetBlockShape =>
-      isBudgetBlockShape(shape) && shape.props.isSavingsBlock && shape.props.sourceFrameId !== ''
+      isBudgetBlockShape(shape) && shape.props.type === 'savings' && shape.props.sourceFrameId !== ''
   );
 
   for (const block of savingsBlocks) {
