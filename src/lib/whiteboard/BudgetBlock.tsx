@@ -106,7 +106,13 @@ function BudgetBlockComponent({ shape }: BudgetBlockComponentProps) {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`
   }
 
-  const backgroundColor = hexToRgba(colorValue, opacity)
+  const backgroundColor = hexToRgba(colorValue, 0.3)
+
+  // Create dotted pattern for income blocks
+  const backgroundImage = type === 'income'
+    ? `radial-gradient(circle, ${colorValue} 1.5px, transparent 1.5px)`
+    : 'none'
+  const backgroundSize = type === 'income' ? '12px 12px' : 'auto'
 
   const [editingField, setEditingField] = useState<'name' | 'amount' | null>(null)
   const [nameDraft, setNameDraft] = useState(name)
@@ -248,7 +254,9 @@ function BudgetBlockComponent({ shape }: BudgetBlockComponentProps) {
         width: w,
         height: h,
         backgroundColor,
-        border: '2px solid var(--budget-block-border)',
+        backgroundImage,
+        backgroundSize,
+        border: `4px solid ${colorValue}`,
         borderRadius: '4px',
         display: 'flex',
         flexDirection: 'column',
