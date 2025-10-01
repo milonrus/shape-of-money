@@ -108,7 +108,7 @@ function findAllFramesWithBudgetBlocks(editor: ReturnType<typeof useEditor>): TL
 
   return frames.filter(frame => {
     const aggregate = collectBudgetBlockData(editor, frame.id);
-    return aggregate.count > 0;
+    return aggregate.count > 0 || aggregate.savingsCount > 0;
   });
 }
 
@@ -221,7 +221,7 @@ export function FrameInfoPanel() {
                   className="mb-2 text-xs font-semibold uppercase tracking-wide"
                   style={{ color: 'var(--tl-color-text-3)' }}
                 >
-                  Frame: {summary.frameName}
+                  {summary.frameName}
                 </div>
               )}
 

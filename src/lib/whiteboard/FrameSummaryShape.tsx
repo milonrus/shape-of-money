@@ -221,6 +221,7 @@ export type FrameSummaryShape = TLBaseShape<
 const Versions = createShapePropsMigrationIds('frame-summary', {
   AddManualPositioning: 1,
   AddSavings: 2,
+  IncreaseHeight: 3,
 });
 
 const frameSummaryMigrations = createShapePropsMigrationSequence({
@@ -255,6 +256,21 @@ const frameSummaryMigrations = createShapePropsMigrationSequence({
         delete (props as Partial<FrameSummaryShape['props']>).hasSavings;
       },
     },
+    {
+      id: Versions.IncreaseHeight,
+      up: (props) => {
+        // Update height from 150 to 200 to accommodate frame name
+        if (props.h === 150) {
+          props.h = 200;
+        }
+      },
+      down: (props) => {
+        // Revert height back to 150
+        if (props.h === 200) {
+          props.h = 150;
+        }
+      },
+    },
   ],
 });
 
@@ -268,7 +284,7 @@ export class FrameSummaryUtil extends ShapeUtil<FrameSummaryShape> {
   getDefaultProps(): FrameSummaryShape['props'] {
     return {
       w: 300,
-      h: 150,
+      h: 200,
       frameId: '',
       frameName: '',
       incomeTotal: 0,

@@ -1,9 +1,9 @@
 import { useCallback, useRef, useEffect } from 'react';
-import { Tldraw, Editor, type TLUiOverrides, createShapeId } from '@tldraw/tldraw';
+import { Tldraw, Editor, type TLUiOverrides, createShapeId, toRichText, renderPlaintextFromRichText } from '@tldraw/tldraw';
 import '@tldraw/tldraw/tldraw.css';
 import { BudgetBlockUtil, computeDimensionsForAmount } from '../../lib/whiteboard/BudgetBlock';
 import type { BudgetBlockShape } from '../../lib/whiteboard/BudgetBlock';
-import type { TLFrameShape, TLParentId, TLShape, TLShapeId } from '@tldraw/tlschema';
+import type { TLFrameShape, TLParentId, TLShape, TLShapeId, TLArrowShape } from '@tldraw/tlschema';
 import { BudgetBlockTool } from '../../lib/whiteboard/BudgetBlockTool';
 import { BudgetStylePanel } from './BudgetStylePanel';
 import { BudgetContextMenu } from './BudgetContextMenu';
@@ -70,6 +70,282 @@ const isBudgetBlockShape = (shape: TLShape | null | undefined): shape is BudgetB
 const isFrameSummaryShape = (shape: TLShape | null | undefined): shape is FrameSummaryShape =>
   Boolean(shape && shape.type === 'frame-summary');
 
+const isArrowShape = (shape: TLShape | null | undefined): shape is TLArrowShape =>
+  Boolean(shape && shape.type === 'arrow');
+
+// Parse allocation amount from arrow text label
+const parseArrowAllocation = (editor: Editor, arrow: TLArrowShape): number | null => {
+  if (!arrow.props.richText) return null;
+
+  try {
+    const plainText = renderPlaintextFromRichText(editor, arrow.props.richText);
+    if (!plainText || plainText.trim() === '') return null;
+
+    // Extract numeric value from text (handles formats like "300", "€300", "300 EUR")
+    const numericMatch = plainText.match(/[\d.,]+/);
+    if (!numericMatch) return null;
+
+    const parsed = parseFloat(numericMatch[0].replace(',', ''));
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+// Get all arrows connected to a savings block (both from and to the block)
+const getSavingsBlockArrows = (editor: Editor, savingsBlockId: TLShapeId): TLArrowShape[] => {
+  const arrows: TLArrowShape[] = [];
+
+  // Get arrows pointing TO the savings block
+  const bindingsTo = editor.getBindingsToShape(savingsBlockId, 'arrow');
+  for (const binding of bindingsTo) {
+    const arrow = editor.getShape(binding.fromId);
+    if (arrow && isArrowShape(arrow)) {
+      arrows.push(arrow);
+    }
+  }
+
+  // Get arrows pointing FROM the savings block
+  const bindingsFrom = editor.getBindingsFromShape(savingsBlockId, 'arrow');
+  for (const binding of bindingsFrom) {
+    const arrow = editor.getShape(binding.fromId);
+    if (arrow && isArrowShape(arrow)) {
+      arrows.push(arrow);
+    }
+  }
+
+  // Deduplicate
+  return Array.from(new Set(arrows));
+};
+
+// Collect savings blocks that are linked to a frame via arrows
+const collectArrowBoundSavings = (editor: Editor, frameId: TLShapeId): { savingsTotal: number; savingsCount: number; currencies: Set<string> } => {
+  const result = {
+    savingsTotal: 0,
+    savingsCount: 0,
+    currencies: new Set<string>(),
+  };
+
+  // Track which savings blocks we've seen to avoid double-counting
+  const processedSavingsBlocks = new Set<TLShapeId>();
+
+  // Get all arrow bindings pointing TO this frame
+  const bindingsToFrame = editor.getBindingsToShape(frameId, 'arrow');
+
+  for (const binding of bindingsToFrame) {
+    // Get the arrow shape
+    const arrowShape = editor.getShape(binding.fromId);
+    if (!arrowShape || !isArrowShape(arrowShape)) continue;
+
+    // Get all bindings FROM this arrow to find the other end
+    const arrowBindings = editor.getBindingsFromShape(arrowShape.id, 'arrow');
+
+    for (const arrowBinding of arrowBindings) {
+      // Skip the binding to the frame itself
+      if (arrowBinding.toId === frameId) continue;
+
+      // Check if the other end is a savings block
+      const savingsBlock = editor.getShape(arrowBinding.toId);
+      if (!savingsBlock || !isBudgetBlockShape(savingsBlock)) continue;
+      if (savingsBlock.props.type !== 'savings') continue;
+
+      // Try to parse allocation from arrow text
+      const allocation = parseArrowAllocation(editor, arrowShape);
+
+      // Get total amount from savings block
+      const totalAmount = typeof savingsBlock.props.amount === 'number' && Number.isFinite(savingsBlock.props.amount)
+        ? savingsBlock.props.amount
+        : 0;
+
+      let amountToAdd = 0;
+
+      if (allocation !== null) {
+        // Use explicit allocation from arrow text
+        amountToAdd = Math.min(allocation, totalAmount);
+      } else {
+        // No text on arrow - check if this is the only arrow from this savings block
+        const allArrows = getSavingsBlockArrows(editor, savingsBlock.id);
+        if (allArrows.length === 1) {
+          // Single arrow, no text = 100% allocation
+          amountToAdd = totalAmount;
+        } else {
+          // Multiple arrows but this one has no text - skip it (validation error)
+          continue;
+        }
+      }
+
+      result.savingsTotal += amountToAdd;
+
+      // Only increment count if we haven't seen this savings block before
+      if (!processedSavingsBlocks.has(savingsBlock.id)) {
+        result.savingsCount += 1;
+        processedSavingsBlocks.add(savingsBlock.id);
+      }
+
+      const currency = savingsBlock.props.currency;
+      if (typeof currency === 'string' && currency.trim() !== '') {
+        result.currencies.add(currency);
+      }
+    }
+  }
+
+  return result;
+};
+
+// Track remainder arrow states to detect user deletions
+const remainderArrowStates = new Map<TLShapeId, boolean>();
+
+// Sync arrow allocations: auto-create/update/delete remainder arrows
+function syncArrowAllocations(editor: Editor) {
+  const allShapes = editor.getCurrentPageShapes();
+  const savingsBlocks = allShapes.filter(
+    (shape): shape is BudgetBlockShape => isBudgetBlockShape(shape) && shape.props.type === 'savings'
+  );
+
+  for (const savingsBlock of savingsBlocks) {
+    const totalAmount = typeof savingsBlock.props.amount === 'number' && Number.isFinite(savingsBlock.props.amount)
+      ? savingsBlock.props.amount
+      : 0;
+
+    if (totalAmount <= 0) continue;
+
+    // Get all arrows from this savings block
+    const arrows = getSavingsBlockArrows(editor, savingsBlock.id);
+
+    // Calculate total allocated amount (excluding remainder arrow)
+    const remainderArrowId = createShapeId(`remainder-arrow-${savingsBlock.id}`);
+    const nonRemainderArrows = arrows.filter(arrow => arrow.id !== remainderArrowId);
+    let totalAllocated = 0;
+
+    for (const arrow of nonRemainderArrows) {
+      const allocation = parseArrowAllocation(editor, arrow);
+
+      if (allocation !== null) {
+        totalAllocated += allocation;
+      } else {
+        // Arrow with no text - assume 100% if it's the only arrow
+        if (arrows.length === 1) {
+          totalAllocated = totalAmount;
+        }
+      }
+    }
+
+    // Calculate remainder
+    const remainder = totalAmount - totalAllocated;
+
+    // Check if remainder arrow exists now and existed before
+    const existingRemainderArrow = editor.getShape(remainderArrowId);
+    const remainderExistedBefore = remainderArrowStates.get(savingsBlock.id) === true;
+    const remainderExistsNow = existingRemainderArrow && isArrowShape(existingRemainderArrow);
+
+    // Detect if user deleted the remainder arrow
+    const remainderWasDeleted = remainderExistedBefore && !remainderExistsNow && remainder > 0;
+
+    if (remainderWasDeleted && nonRemainderArrows.length > 0) {
+      // User deleted remainder arrow - redistribute 100% across remaining arrows
+      const arrowsWithAllocation = nonRemainderArrows.filter(arrow => parseArrowAllocation(editor, arrow) !== null);
+
+      if (arrowsWithAllocation.length > 0) {
+        // Calculate proportions
+        const totalCurrentAllocation = arrowsWithAllocation.reduce((sum, arrow) => {
+          const allocation = parseArrowAllocation(editor, arrow);
+          return sum + (allocation || 0);
+        }, 0);
+
+        if (totalCurrentAllocation > 0) {
+          // Update each arrow proportionally
+          for (const arrow of arrowsWithAllocation) {
+            const currentAllocation = parseArrowAllocation(editor, arrow);
+            if (currentAllocation !== null && currentAllocation > 0) {
+              const proportion = currentAllocation / totalCurrentAllocation;
+              const newAllocation = Math.round(totalAmount * proportion);
+
+              editor.updateShape({
+                id: arrow.id,
+                type: 'arrow',
+                props: {
+                  richText: toRichText(newAllocation.toString()),
+                },
+              });
+            }
+          }
+        }
+      } else if (nonRemainderArrows.length === 1 && nonRemainderArrows[0]) {
+        // Single arrow with no text - set to 100%
+        editor.updateShape({
+          id: nonRemainderArrows[0].id,
+          type: 'arrow',
+          props: {
+            richText: toRichText(totalAmount.toString()),
+          },
+        });
+      }
+
+      // Mark that we've handled this deletion
+      remainderArrowStates.set(savingsBlock.id, false);
+      continue;
+    }
+
+    // Normal remainder arrow logic
+    if (remainder > 0 && nonRemainderArrows.length > 0) {
+      // Need remainder arrow
+      const savingsBlockBounds = editor.getShapePageBounds(savingsBlock);
+
+      if (!savingsBlockBounds) continue;
+
+      if (remainderExistsNow) {
+        // Update existing remainder arrow text
+        editor.updateShape({
+          id: remainderArrowId,
+          type: 'arrow',
+          props: {
+            richText: toRichText(remainder.toString()),
+          },
+        });
+      } else {
+        // Create new remainder arrow
+        const startX = savingsBlockBounds.x + savingsBlockBounds.w / 2;
+        const startY = savingsBlockBounds.y + savingsBlockBounds.h;
+
+        editor.createShape({
+          id: remainderArrowId,
+          type: 'arrow',
+          x: startX,
+          y: startY,
+          props: {
+            start: { x: 0, y: 0 },
+            end: { x: 0, y: 100 },
+            richText: toRichText(remainder.toString()),
+          },
+        });
+
+        // Bind the start of the arrow to the savings block
+        editor.createBinding({
+          type: 'arrow',
+          fromId: remainderArrowId,
+          toId: savingsBlock.id,
+          props: {
+            terminal: 'start',
+            normalizedAnchor: { x: 0.5, y: 1 },
+            isExact: false,
+            isPrecise: false,
+          },
+        });
+      }
+
+      // Track that remainder arrow exists
+      remainderArrowStates.set(savingsBlock.id, true);
+    } else if (remainderExistsNow) {
+      // No remainder needed, delete remainder arrow if it exists
+      editor.deleteShape(remainderArrowId);
+      remainderArrowStates.set(savingsBlock.id, false);
+    } else {
+      // No remainder arrow
+      remainderArrowStates.set(savingsBlock.id, false);
+    }
+  }
+}
+
 const collectBudgetBlockData = (editor: Editor, parentId: TLParentId): BudgetBlockAggregate => {
   const aggregate: BudgetBlockAggregate = {
     total: 0,
@@ -132,6 +408,15 @@ const collectBudgetBlockData = (editor: Editor, parentId: TLParentId): BudgetBlo
       aggregate.savingsCount += nested.savingsCount;
       nested.currencies.forEach((value) => aggregate.currencies.add(value));
     }
+  }
+
+  // Check if this parent is a frame, and if so, collect arrow-linked savings
+  const parentShape = editor.getShape(parentId);
+  if (parentShape && isFrameShape(parentShape)) {
+    const arrowLinkedSavings = collectArrowBoundSavings(editor, parentShape.id);
+    aggregate.savingsTotal += arrowLinkedSavings.savingsTotal;
+    aggregate.savingsCount += arrowLinkedSavings.savingsCount;
+    arrowLinkedSavings.currencies.forEach((currency) => aggregate.currencies.add(currency));
   }
 
   return aggregate;
@@ -221,8 +506,8 @@ function syncFrameSummaryShapes(editor: Editor) {
   for (const frame of frames) {
     const aggregate = collectBudgetBlockData(editor, frame.id);
 
-    // Skip frames without budget blocks
-    if (aggregate.count === 0) {
+    // Skip frames without budget blocks AND without arrow-linked savings
+    if (aggregate.count === 0 && aggregate.savingsCount === 0) {
       continue;
     }
 
@@ -283,7 +568,7 @@ function syncFrameSummaryShapes(editor: Editor) {
         y: summaryY,
         props: {
           w: 300,
-          h: 150,
+          h: 200,
           frameId: frame.id,
           frameName: frame.props.name || '',
           incomeTotal: aggregate.incomeTotal,
@@ -324,9 +609,9 @@ function syncSavingsBlocks(editor: Editor) {
       continue;
     }
 
-    // Calculate current savings from the source frame
+    // Calculate current savings from the source frame (including arrow-linked savings)
     const aggregate = collectBudgetBlockData(editor, sourceFrameId);
-    const savings = Math.max(aggregate.incomeTotal - aggregate.expenseTotal, 0);
+    const savings = Math.max(aggregate.savingsTotal + aggregate.incomeTotal - aggregate.expenseTotal, 0);
 
     // Only update if amount changed
     if (block.props.amount !== savings) {
@@ -357,6 +642,7 @@ export function Whiteboard({
   const frameSummaryCleanupRef = useRef<(() => void) | null>(null);
   const summaryShapeCleanupRef = useRef<(() => void) | null>(null);
   const savingsBlockCleanupRef = useRef<(() => void) | null>(null);
+  const arrowAllocationCleanupRef = useRef<(() => void) | null>(null);
   const persistenceId = persistenceKey ?? DEFAULT_PERSISTENCE_KEY;
   const { mode } = useTheme();
 
@@ -401,6 +687,25 @@ export function Whiteboard({
     });
 
     savingsBlockCleanupRef.current = () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // Setup sync for arrow allocations (remainder arrows)
+  const setupArrowAllocationSync = useCallback((editor: Editor) => {
+    // Clean up previous listener
+    arrowAllocationCleanupRef.current?.();
+    arrowAllocationCleanupRef.current = null;
+
+    // Initial sync
+    syncArrowAllocations(editor);
+
+    // Listen to store changes and sync
+    const unsubscribe = editor.store.listen(() => {
+      syncArrowAllocations(editor);
+    });
+
+    arrowAllocationCleanupRef.current = () => {
       unsubscribe();
     };
   }, []);
@@ -457,9 +762,10 @@ export function Whiteboard({
       setupFrameSummaryTracking(editor);
       setupFrameSummaryShapeSync(editor);
       setupSavingsBlockSync(editor);
+      setupArrowAllocationSync(editor);
       onEditorReady?.(editor);
     },
-    [applyEditorTheme, mode, onEditorReady, setupFrameSummaryTracking, setupFrameSummaryShapeSync, setupSavingsBlockSync]
+    [applyEditorTheme, mode, onEditorReady, setupFrameSummaryTracking, setupFrameSummaryShapeSync, setupSavingsBlockSync, setupArrowAllocationSync]
   );
 
   useEffect(() => {
@@ -475,7 +781,8 @@ export function Whiteboard({
     setupFrameSummaryTracking(editor);
     setupFrameSummaryShapeSync(editor);
     setupSavingsBlockSync(editor);
-  }, [setupFrameSummaryTracking, setupFrameSummaryShapeSync, setupSavingsBlockSync]);
+    setupArrowAllocationSync(editor);
+  }, [setupFrameSummaryTracking, setupFrameSummaryShapeSync, setupSavingsBlockSync, setupArrowAllocationSync]);
 
   useEffect(() => {
     return () => {
@@ -487,6 +794,9 @@ export function Whiteboard({
 
       savingsBlockCleanupRef.current?.();
       savingsBlockCleanupRef.current = null;
+
+      arrowAllocationCleanupRef.current?.();
+      arrowAllocationCleanupRef.current = null;
 
       if (onFrameBudgetSummaryChange) {
         onFrameBudgetSummaryChange(null);
